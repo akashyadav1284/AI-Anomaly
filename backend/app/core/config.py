@@ -25,13 +25,27 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
 
     # CORS configuration
-    CORS_ORIGINS: Union[List[str], str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    CORS_ORIGINS: Union[List[str], str] = ["*"]
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",") if i.strip()]
+        if isinstance(v, str):
+            if v.strip() == "*":
+                return ["*"]
+            raw_items = [i.strip() for i in v.split(",") if i.strip()]
+            normalized = []
+            for item in raw_items:
+                if item == "*":
+                    normalized.append("*")
+                    continue
+                # Normalize origin by ensuring scheme and stripping path
+                if not item.startswith("http://") and not item.startswith("https://"):
+                    normalized.append(f"https://{item}")
+                    normalized.append(f"http://{item}")
+                else:
+                    normalized.append(item.rstrip("/"))
+            return normalized
         elif isinstance(v, list):
             return v
         return [str(v)]
