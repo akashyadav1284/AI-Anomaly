@@ -1,0 +1,15 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.9.0
+pydantic-settings>=2.6.0
+python-dotenv>=1.0.1
+motor>=3.6.0
+pymongo>=4.9.0
+scikit-learn>=1.5.0
+pandas>=2.2.0
+numpy>=1.26.0
+torch>=2.4.0 --extra-index-url https://download.pytorch.org/whl/cpu
+joblib>=1.4.0
+pyjwt>=2.9.0
+passlib[bcrypt]>=1.7.4
+pyarrow>=15.0.0

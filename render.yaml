@@ -2,7 +2,7 @@ services:
   - type: web
     name: iot-anomaly-backend
     env: python
-    buildCommand: "pip install --upgrade pip && pip install -e ./backend"
+    buildCommand: "pip install --upgrade pip && pip install -r backend/requirements.txt && pip install -e ./backend"
     startCommand: "python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: APP_ENV
