@@ -1,0 +1,95 @@
+# Operating System Files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Node / Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+.eslintcache
+
+# Python / Backend
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing & Caches
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+.vitest/
+
+# ML / Research / Large Artifacts
+ml/data/raw/*
+!ml/data/raw/.gitkeep
+ml/data/processed/*
+!ml/data/processed/.gitkeep
+artifacts/models/*
+!artifacts/models/.gitkeep
+!artifacts/models/isolation_forest/
+!artifacts/models/isolation_forest/*
+artifacts/checkpoints/*
+!artifacts/checkpoints/.gitkeep
+*.h5
+*.pt
+*.pth
+*.pkl
+*.joblib
+*.parquet
+*.feather
+
+# Jupyter Notebooks Checkpoints
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# Local MongoDB / Docker Volumes
+mongo_data/
+*.log
+
+# Phase 2 Generated & Imported Datasets
+data/raw/*
+!data/raw/.gitkeep
+data/interim/*
+!data/interim/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/synthetic/*
+!data/synthetic/.gitkeep
+data/fixtures/*
+!data/fixtures/.gitkeep
+data/reports/*
+!data/reports/.gitkeep
+data/metadata/*
+!data/metadata/.gitkeep
+

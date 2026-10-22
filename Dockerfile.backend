@@ -1,0 +1,37 @@
+# Backend Python Container
+FROM python:3.11-slim
+
+# Prevent Python from writing .pyc files and enable unbuffered output
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Install system dependencies if required
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy pyproject.toml first for layer caching
+COPY backend/pyproject.toml ./backend/
+COPY pyproject.toml ./
+
+# Install python dependencies
+RUN pip install --no-cache-dir -e ./backend
+
+# Copy backend code, ML research engine, and trained model artifacts
+COPY backend/app ./backend/app
+COPY ml ./ml
+COPY artifacts ./artifacts
+
+# Set PYTHONPATH so both backend and ml modules resolve
+ENV PYTHONPATH="/app/backend:/app"
+
+# Add healthcheck using curl
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/api/v1/health || exit 1
+
+EXPOSE 8000
+
+WORKDIR /app/backend
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,24 @@
+# Frontend Build Stage
+FROM node:20-alpine AS build
+
+WORKDIR /app
+
+# Install dependencies based on package lock/json
+COPY frontend/package.json ./
+RUN npm install
+
+# Copy application source
+COPY frontend/ ./
+
+# Build production assets
+RUN npm run build
+
+# Static Serving Stage
+FROM nginx:alpine AS runner
+
+# Copy custom nginx config or default html
+COPY --from=build /app/dist /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

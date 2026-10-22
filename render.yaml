@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: iot-anomaly-backend
+    env: python
+    buildCommand: "pip install --upgrade pip && pip install -e ./backend"
+    startCommand: "python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: PYTHONPATH
+        value: "/opt/render/project/src:/opt/render/project/src/backend"
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: DATABASE_NAME
+        value: iot_anomaly_detection
+      - key: API_KEY
+        value: iot-secret-api-key-2026
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: MONGODB_URI
+        sync: false

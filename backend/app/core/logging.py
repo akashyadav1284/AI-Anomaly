@@ -1,0 +1,23 @@
+"""Structured logging configuration."""
+import logging
+import sys
+
+
+def setup_logging(log_level: str = "INFO") -> logging.Logger:
+    """Configure formatted console logging for application modules."""
+    numeric_level = getattr(logging, log_level.upper(), logging.INFO)
+
+    log_format = (
+        "%(asctime)s | %(levelname)-8s | %(name)s:%(lineno)d - %(message)s"
+    )
+
+    logging.basicConfig(
+        level=numeric_level,
+        format=log_format,
+        handlers=[logging.StreamHandler(sys.stdout)],
+        force=True,
+    )
+
+    logger = logging.getLogger("iot_anomaly_detection")
+    logger.setLevel(numeric_level)
+    return logger
