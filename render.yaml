@@ -16,7 +16,7 @@ services:
       - key: DATABASE_NAME
         value: iot_anomaly_detection
       - key: API_KEY
-        value: iot-secret-api-key-2026
+        generateValue: true
       - key: JWT_SECRET_KEY
         generateValue: true
       - key: MONGODB_URI

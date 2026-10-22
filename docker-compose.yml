@@ -14,8 +14,8 @@ services:
       - CORS_ORIGINS=http://localhost:5173,http://localhost:3000
       - MONGODB_URI=mongodb://admin:password123@mongodb:27017
       - DATABASE_NAME=iot_anomaly_detection
-      - API_KEY=iot-secret-api-key-2026
-      - JWT_SECRET_KEY=iot-production-jwt-token-secret-key-32bytes!
+      - API_KEY=${API_KEY:-dev-insecure-key-change-in-prod}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-insecure-jwt-key-change-in-prod}
     volumes:
       - ./artifacts:/app/artifacts
       - ./uploads:/app/uploads
