@@ -1,0 +1,36 @@
+{
+  "dataset_name": "demo",
+  "dataset_id": "synthetic_iot_v1",
+  "source": "IoTSensorGenerator",
+  "description": "Synthetic multi-device IoT telemetry generated via CLI",
+  "created_at": "2026-10-22T05:57:05.584462+00:00",
+  "row_count": 500,
+  "column_count": 11,
+  "devices": [
+    "sensor_node_01"
+  ],
+  "feature_names": [
+    "temperature",
+    "humidity",
+    "pressure",
+    "vibration",
+    "current"
+  ],
+  "timestamp_start": null,
+  "timestamp_end": null,
+  "sampling_frequency": null,
+  "label_availability": true,
+  "anomaly_counts": {
+    "none": 329,
+    "gradual_drift": 60,
+    "collective": 40,
+    "stuck_sensor": 30,
+    "contextual": 20,
+    "noise_burst": 20,
+    "point_spike": 1
+  },
+  "checksum_sha256": "5ef9296afb6ad73c1e01f765c24dc94255e06bd34c3a1ae21f58e11a6e463425",
+  "license_or_access_notes": "Research and internal development only.",
+  "preprocessing_history": [],
+  "saved_path": "C:\\Users\\akash\\OneDrive\\Desktop\\CSE276\\data\\synthetic\\demo.parquet"
+}

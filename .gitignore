@@ -93,7 +93,11 @@ data/processed/*
 !data/processed/.gitkeep
 data/synthetic/*
 !data/synthetic/.gitkeep
+!data/synthetic/demo.csv
+!data/synthetic/demo.metadata.json
 data/fixtures/*
+!data/fixtures/.gitkeep
+!data/fixtures/nab_sample.csv
 !data/fixtures/.gitkeep
 data/reports/*
 !data/reports/.gitkeep
