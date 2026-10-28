@@ -32,14 +32,21 @@ export function SimulationControlCenterPage() {
   const [randomSeed, setRandomSeed] = useState(42);
   const [modelName, setModelName] = useState('isolation_forest');
   const [persistToDb, setPersistToDb] = useState(true);
-  const [devicesInput, setDevicesInput] = useState('sensor-01, sensor-02');
+  const [devicesInput, setDevicesInput] = useState('sim-node-01, sim-node-02');
   const [injections, setInjections] = useState<AnomalyInjectionConfig[]>([
     {
       anomaly_type: 'spike',
-      target_channels: ['temperature'],
+      target_channels: ['temperature', 'vibration'],
       magnitude: 5.0,
-      duration_steps: 5,
-      start_step: 10,
+      duration_steps: 10,
+      start_step: 5,
+    },
+    {
+      anomaly_type: 'drift',
+      target_channels: ['pressure', 'current'],
+      magnitude: 3.5,
+      duration_steps: 15,
+      start_step: 25,
     },
   ]);
 

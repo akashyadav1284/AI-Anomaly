@@ -78,8 +78,15 @@ export function LiveMonitoringPage() {
             anomaly_type: 'spike',
             target_channels: ['temperature', 'vibration'],
             magnitude: 5.0,
-            duration_steps: 5,
-            start_step: 15,
+            duration_steps: 10,
+            start_step: 5,
+          },
+          {
+            anomaly_type: 'drift',
+            target_channels: ['pressure', 'current'],
+            magnitude: 3.5,
+            duration_steps: 15,
+            start_step: 25,
           },
         ],
       });
