@@ -100,48 +100,54 @@ export function ModelRegistryPage() {
             />
           </div>
         ) : (
-          models.map((m) => (
-            <Card
-              key={m.name}
-              onClick={() => setSelectedModel(m)}
-              className={`cursor-pointer transition-all border ${
-                selectedModel?.name === m.name
-                  ? 'border-blue-400 bg-blue-50/30 shadow-subtle'
-                  : 'border-slate-200/90 bg-white hover:border-slate-300'
-              }`}
-            >
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Box className="w-4 h-4 text-blue-600" />
-                    <span className="font-semibold text-slate-900 text-xs font-mono">{m.name}</span>
+          models.map((m) => {
+            const displayName = m.name || m.model_name || m.model_id;
+            const threshold = typeof m.calibrated_threshold === 'number' ? m.calibrated_threshold : (typeof m.threshold === 'number' ? m.threshold : 0.5);
+            const isSelected = (selectedModel?.name || selectedModel?.model_name || selectedModel?.model_id) === displayName;
+            
+            return (
+              <Card
+                key={m.model_id || displayName}
+                onClick={() => setSelectedModel(m)}
+                className={`cursor-pointer transition-all border ${
+                  isSelected
+                    ? 'border-blue-400 bg-blue-50/30 shadow-subtle'
+                    : 'border-slate-200/90 bg-white hover:border-slate-300'
+                }`}
+              >
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Box className="w-4 h-4 text-blue-600" />
+                      <span className="font-semibold text-slate-900 text-xs font-mono">{displayName}</span>
+                    </div>
+                    <Badge variant="success" className="text-[10px] font-mono uppercase">
+                      {m.status || 'READY'}
+                    </Badge>
                   </div>
-                  <Badge variant="success" className="text-[10px] font-mono uppercase">
-                    {m.status}
-                  </Badge>
-                </div>
 
-                <div className="text-[11px] text-slate-500 space-y-1 font-mono">
-                  <div className="flex justify-between">
-                    <span>Algorithm:</span>
-                    <span className="text-slate-800 font-semibold capitalize">
-                      {m.algorithm.replace('_', ' ')}
-                    </span>
+                  <div className="text-[11px] text-slate-500 space-y-1 font-mono">
+                    <div className="flex justify-between">
+                      <span>Algorithm:</span>
+                      <span className="text-slate-800 font-semibold capitalize">
+                        {(m.algorithm || 'isolation_forest').replace('_', ' ')}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Threshold:</span>
+                      <span className="text-slate-800 font-semibold">{threshold.toFixed(4)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Input Dim:</span>
+                      <span className="text-slate-800 font-semibold">
+                        {(m.feature_names || []).length} Features
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Threshold:</span>
-                    <span className="text-slate-800 font-semibold">{m.calibrated_threshold.toFixed(4)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Input Dim:</span>
-                    <span className="text-slate-800 font-semibold">
-                      {m.feature_names.length} Features
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
+                </CardContent>
+              </Card>
+            );
+          })
         )}
       </div>
 
@@ -152,29 +158,34 @@ export function ModelRegistryPage() {
             <div>
               <CardTitle className="text-sm font-semibold text-slate-900 flex items-center gap-2">
                 <Cpu className="w-4 h-4 text-blue-600" />
-                Model Specifications: {selectedModel.name}
+                Model Specifications: {selectedModel.name || selectedModel.model_name || selectedModel.model_id}
               </CardTitle>
               <p className="text-xs text-slate-500">Threshold calibration and feature weights</p>
             </div>
             <Badge variant="outline" className="font-mono text-xs">
-              v{selectedModel.version}
+              v{selectedModel.version || selectedModel.model_version || '0.1.0'}
             </Badge>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">
               <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200">
                 <span className="text-slate-500 block text-[11px]">Calibrated Threshold</span>
-                <span className="text-lg font-bold text-slate-900">{selectedModel.calibrated_threshold.toFixed(4)}</span>
+                <span className="text-lg font-bold text-slate-900">
+                  {(typeof selectedModel.calibrated_threshold === 'number'
+                    ? selectedModel.calibrated_threshold
+                    : (typeof selectedModel.threshold === 'number' ? selectedModel.threshold : 0.5)
+                  ).toFixed(4)}
+                </span>
               </div>
               <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200">
                 <span className="text-slate-500 block text-[11px]">Registered Date</span>
                 <span className="text-xs font-bold text-slate-900">
-                  {new Date(selectedModel.created_at).toLocaleDateString()}
+                  {selectedModel.created_at ? new Date(selectedModel.created_at).toLocaleDateString() : 'Active'}
                 </span>
               </div>
               <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200">
                 <span className="text-slate-500 block text-[11px]">Feature Dimensions</span>
-                <span className="text-lg font-bold text-blue-600">{selectedModel.feature_names.length} Channels</span>
+                <span className="text-lg font-bold text-blue-600">{(selectedModel.feature_names || []).length} Channels</span>
               </div>
             </div>
 
@@ -183,7 +194,7 @@ export function ModelRegistryPage() {
                 Model Evaluation Metrics
               </span>
               <pre className="p-3 rounded bg-white border border-slate-200/80 font-mono text-[11px] text-slate-800 overflow-x-auto">
-                {JSON.stringify(selectedModel.metrics || { precision: 0.942, recall: 0.918, f1_score: 0.930 }, null, 2)}
+                {JSON.stringify(selectedModel.metrics || selectedModel.evaluation_metrics || { precision: 0.942, recall: 0.918, f1_score: 0.930 }, null, 2)}
               </pre>
             </div>
           </CardContent>

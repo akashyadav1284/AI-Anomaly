@@ -170,13 +170,18 @@ export interface ModelMetrics {
 
 export interface ModelArtifact {
   model_id: string;
-  name: string;
-  version: string;
+  name?: string;
+  model_name?: string;
+  version?: string;
+  model_version?: string;
   algorithm: string;
-  status: 'active' | 'archived' | 'training' | 'failed';
-  calibrated_threshold: number;
+  status: 'active' | 'archived' | 'training' | 'failed' | 'ready' | string;
+  calibrated_threshold?: number;
+  threshold?: number;
+  threshold_method?: string;
   feature_names: string[];
   metrics?: ModelMetrics;
+  evaluation_metrics?: any;
   created_at: string;
 }
 
