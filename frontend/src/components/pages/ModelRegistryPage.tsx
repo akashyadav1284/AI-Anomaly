@@ -37,7 +37,7 @@ export function ModelRegistryPage() {
       setTrainingJobStatus('Submitting background training worker job...');
       const res = await apiService.triggerTraining({
         model_name: selectedAlgo,
-        dataset_name: 'synthetic_iot_v1',
+        dataset_id: 'DS_DEMO_SYNTH',
       });
       setTrainingJobStatus(`Job scheduled successfully! ID: ${res.job_id}`);
       setTimeout(() => {

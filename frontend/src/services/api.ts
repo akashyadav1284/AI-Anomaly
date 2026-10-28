@@ -339,12 +339,18 @@ export const apiService = {
 
   triggerTraining: async (payload: {
     model_name: string;
-    dataset_name: string;
+    dataset_id?: string;
+    dataset_name?: string;
     parameters?: Record<string, unknown>;
-  }): Promise<{ job_id: string; status: string; message: string }> => {
-    return request<{ job_id: string; status: string; message: string }>('/models/train', {
+  }): Promise<{ job_id: string; status: string; message?: string }> => {
+    const bodyPayload = {
+      model_name: payload.model_name,
+      dataset_id: payload.dataset_id || 'DS_DEMO_SYNTH',
+      model_params: payload.parameters || {},
+    };
+    return request<{ job_id: string; status: string; message?: string }>('/models/train', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(bodyPayload),
     });
   },
 
