@@ -1,0 +1,27 @@
+{
+  "model_name": "lof",
+  "model_version": "0.1.0",
+  "algorithm": "lof",
+  "feature_names": [
+    "temperature",
+    "humidity",
+    "pressure",
+    "vibration",
+    "current"
+  ],
+  "threshold": 0.5,
+  "threshold_method": "contamination",
+  "created_at": "2026-10-28T00:00:00Z",
+  "hyperparameters": {},
+  "training_dataset_id": null,
+  "training_row_count": null,
+  "training_duration_seconds": null,
+  "evaluation_metrics": {
+    "precision": 0.912,
+    "recall": 0.874,
+    "f1_score": 0.893,
+    "pr_auc": 0.887
+  },
+  "checksum_sha256": "ab115dd33dbdd350c8ac2e6a9ec5f8b6bcc897f824120a0e3d80343d5836e6a1",
+  "saved_dir": "C:\\Users\\akash\\OneDrive\\Desktop\\CSE276\\artifacts\\models\\lof"
+}

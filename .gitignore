@@ -59,6 +59,10 @@ artifacts/models/*
 !artifacts/models/.gitkeep
 !artifacts/models/isolation_forest/
 !artifacts/models/isolation_forest/*
+!artifacts/models/one_class_svm/
+!artifacts/models/one_class_svm/*
+!artifacts/models/lof/
+!artifacts/models/lof/*
 artifacts/checkpoints/*
 !artifacts/checkpoints/.gitkeep
 *.h5
@@ -67,6 +71,8 @@ artifacts/checkpoints/*
 *.pkl
 *.joblib
 !artifacts/models/isolation_forest/*.joblib
+!artifacts/models/one_class_svm/*.joblib
+!artifacts/models/lof/*.joblib
 *.parquet
 *.feather
 
