@@ -132,23 +132,50 @@ export function DatasetExplorerPage() {
 
     const loadDetails = async () => {
       setLoadingPreview(true);
+      
+      // 1. Load audit report directly from dataset object or endpoint
+      if (selectedDataset.quality_summary && Object.keys(selectedDataset.quality_summary).length > 0) {
+        setAuditResult(selectedDataset.quality_summary as QualityAuditResponse);
+      }
+
+      // 2. Load preview traces: attempt preview endpoint, fallback to sensor readings by device
       try {
         const p = await apiService.getDatasetPreview(selectedDataset.dataset_id, 35);
-        setPreviewData({
-          columns: p.columns || [],
-          rows: p.preview || [],
-        });
+        if (p && p.preview && p.preview.length > 0) {
+          setPreviewData({
+            columns: p.columns || [],
+            rows: p.preview || [],
+          });
+        } else {
+          throw new Error('No preview rows returned from preview endpoint');
+        }
       } catch {
-        setPreviewData({ columns: [], rows: [] });
+        // Fallback: query sensor readings for the first device associated with this dataset
+        const primaryDevice = selectedDataset.devices?.[0] || 'sensor_node_01';
+        try {
+          const readingsRes = await apiService.getSensorReadings(primaryDevice, 35);
+          if (readingsRes && readingsRes.items && readingsRes.items.length > 0) {
+            setPreviewData({
+              columns: selectedDataset.feature_names || ['temperature', 'humidity', 'pressure', 'vibration', 'current'],
+              rows: readingsRes.items,
+            });
+          } else {
+            setPreviewData({ columns: selectedDataset.feature_names || [], rows: [] });
+          }
+        } catch {
+          setPreviewData({ columns: selectedDataset.feature_names || [], rows: [] });
+        }
       } finally {
         setLoadingPreview(false);
       }
 
       try {
         const audit = await apiService.getDatasetAudit(selectedDataset.dataset_id);
-        setAuditResult(audit);
+        if (audit && Object.keys(audit).length > 0) {
+          setAuditResult(audit);
+        }
       } catch {
-        setAuditResult(null);
+        // Keep cached quality_summary if available
       }
     };
     loadDetails();

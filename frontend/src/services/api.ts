@@ -129,7 +129,11 @@ export const apiService = {
   },
 
   getDatasetAudit: async (datasetId: string): Promise<QualityAuditResponse> => {
-    return request<QualityAuditResponse>(`/datasets/${datasetId}/audit`);
+    try {
+      return await request<QualityAuditResponse>(`/datasets/${datasetId}/quality`);
+    } catch {
+      return request<QualityAuditResponse>(`/datasets/${datasetId}/audit`);
+    }
   },
 
   generateSyntheticDataset: async (payload: {
