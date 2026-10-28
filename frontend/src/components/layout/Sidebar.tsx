@@ -110,7 +110,7 @@ export function Sidebar({
           {!isCollapsed && (
             <div className="flex flex-col truncate">
               <span className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
-                IoT Anomaly Guard
+                AI - Guard
               </span>
               <span className="text-[10px] text-slate-500 font-mono">
                 Research v0.1.0 • Phase 6

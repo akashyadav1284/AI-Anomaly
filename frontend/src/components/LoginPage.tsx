@@ -116,7 +116,7 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
 
             <div className="space-y-2">
               <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                IoT Anomaly Guard
+                AI - Guard
               </h1>
               <p className="text-sm font-semibold text-blue-600 tracking-tight">
                 See the signal. Detect the anomaly.
@@ -146,7 +146,7 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
               <div className="flex items-center gap-2">
                 <BrandLogo size={24} pulse={false} />
                 <span className="text-xs font-bold text-slate-800 tracking-tight">
-                  IoT Anomaly Guard
+                  AI - Guard
                 </span>
               </div>
               <h2 className="text-xl font-bold text-slate-900 tracking-tight">
