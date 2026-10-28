@@ -14,6 +14,9 @@ import {
   SimulatorStatusResponse,
   SimulatorStartRequest,
   SimulatorControlResponse,
+  SystemDiagnosticsResponse,
+  SecurityScanFinding,
+  AuditLogItem,
 } from '../types/api';
 
 const API_BASE_URL =
@@ -409,5 +412,23 @@ export const apiService = {
     return request<SimulatorControlResponse>('/simulator/reset', {
       method: 'POST',
     });
+  },
+
+  // System Observability & Diagnostics
+  getSystemDiagnostics: async (): Promise<SystemDiagnosticsResponse> => {
+    return request<SystemDiagnosticsResponse>('/system/diagnostics');
+  },
+
+  getSecurityFindings: async (): Promise<SecurityScanFinding[]> => {
+    return request<SecurityScanFinding[]>('/system/security-scan');
+  },
+
+  getAuditLogs: async (params?: { limit?: number; event_type?: string; actor?: string }): Promise<{ items: AuditLogItem[]; total: number }> => {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set('limit', String(params.limit));
+    if (params?.event_type) q.set('event_type', params.event_type);
+    if (params?.actor) q.set('actor', params.actor);
+    const qs = q.toString() ? '?' + q.toString() : '';
+    return request<{ items: AuditLogItem[]; total: number }>('/system/audit-logs' + qs);
   },
 };

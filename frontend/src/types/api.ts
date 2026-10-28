@@ -288,3 +288,42 @@ export interface WsHeartbeatEvent {
 }
 
 export type WsSimulatorMessage = WsTelemetryEvent | WsAnomalyAlertEvent | WsStatusEvent | WsHeartbeatEvent;
+
+export interface DiagnosticCheckResult {
+  name: string;
+  category: string;
+  status: 'healthy' | 'warning' | 'error' | 'info';
+  latency_ms?: number;
+  message: string;
+  details?: Record<string, any>;
+}
+
+export interface SystemDiagnosticsResponse {
+  executed_at: string;
+  overall_status: string;
+  checks: DiagnosticCheckResult[];
+  summary: Record<string, number>;
+}
+
+export interface SecurityScanFinding {
+  id: string;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  component: string;
+  title: string;
+  description: string;
+  remediation: string;
+  status: string;
+}
+
+export interface AuditLogItem {
+  log_id: string;
+  timestamp: string;
+  event_type: string;
+  actor: string;
+  action: string;
+  target_resource: string;
+  result: string;
+  severity: string;
+  correlation_id?: string;
+  details?: Record<string, any>;
+}
