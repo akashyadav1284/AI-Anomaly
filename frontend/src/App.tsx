@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Sidebar, NavTab } from './components/layout/Sidebar';
+import { Header } from './components/layout/Header';
+import { SensorWaveBackground } from './components/decorations/SensorWaveBackground';
 import { OverviewPage } from './components/pages/OverviewPage';
 import { LiveMonitoringPage } from './components/pages/LiveMonitoringPage';
 import { SensorExplorerPage } from './components/pages/SensorExplorerPage';
@@ -16,6 +18,10 @@ import { apiService } from './services/api';
 export function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('overview');
   const [simulatorStatus, setSimulatorStatus] = useState<string>('stopped');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
   const { isConnected } = useSimulatorWebSocket();
 
   useEffect(() => {
@@ -32,63 +38,67 @@ export function App() {
     return () => clearInterval(interval);
   }, []);
 
+  const handleGlobalRefresh = () => {
+    setIsRefreshing(true);
+    setRefreshTrigger((prev) => prev + 1);
+    setTimeout(() => setIsRefreshing(false), 800);
+  };
+
   const renderActivePage = () => {
     switch (activeTab) {
       case 'overview':
-        return <OverviewPage />;
+        return <OverviewPage key={refreshTrigger} />;
       case 'live':
-        return <LiveMonitoringPage />;
+        return <LiveMonitoringPage key={refreshTrigger} />;
       case 'sensors':
-        return <SensorExplorerPage />;
+        return <SensorExplorerPage key={refreshTrigger} />;
       case 'anomalies':
-        return <AnomalyInvestigationPage />;
+        return <AnomalyInvestigationPage key={refreshTrigger} />;
       case 'datasets':
-        return <DatasetExplorerPage />;
+        return <DatasetExplorerPage key={refreshTrigger} />;
       case 'models':
-        return <ModelRegistryPage />;
+        return <ModelRegistryPage key={refreshTrigger} />;
       case 'simulator':
-        return <SimulationControlCenterPage />;
+        return <SimulationControlCenterPage key={refreshTrigger} />;
       case 'research':
-        return <ModelResearchLabPage />;
+        return <ModelResearchLabPage key={refreshTrigger} />;
       case 'experiments':
-        return <ExperimentComparisonPage />;
+        return <ExperimentComparisonPage key={refreshTrigger} />;
       case 'reports':
-        return <ReportsPage />;
+        return <ReportsPage key={refreshTrigger} />;
       default:
-        return <OverviewPage />;
+        return <OverviewPage key={refreshTrigger} />;
     }
   };
 
   return (
-    <div className="flex h-screen bg-[#070b14] text-slate-100 overflow-hidden font-sans selection:bg-blue-600/30">
-      {/* Sidebar Navigation */}
+    <div className="flex h-screen bg-[#F8F9FA] text-slate-800 overflow-hidden font-sans relative">
+      {/* Signature Ambient Sensor Wave & Lattice Background */}
+      <SensorWaveBackground opacity={0.65} />
+
+      {/* Categorized Collapsible Sidebar Navigation */}
       <Sidebar
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         isWsConnected={isConnected}
         activeSimulatorStatus={simulatorStatus}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
       />
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        {/* Top Navbar */}
-        <header className="h-14 border-b border-slate-800 bg-slate-900/60 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-20 shrink-0">
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Dashboard / {activeTab}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-slate-800/80 border border-slate-700/60 text-xs">
-              <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-              <span className="text-slate-300 font-mono text-[11px]">RESEARCH MODE</span>
-            </div>
-          </div>
-        </header>
+      {/* Main Technical Viewport Area */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto relative z-10">
+        {/* Refined Industrial Top Header */}
+        <Header
+          activeTab={activeTab}
+          isWsConnected={isConnected}
+          simulatorStatus={simulatorStatus}
+          onRefresh={handleGlobalRefresh}
+          isRefreshing={isRefreshing}
+        />
 
         {/* Dynamic Page Container */}
-        <main className="flex-1 p-6 max-w-7xl w-full mx-auto">
+        <main className="flex-1 p-5 sm:p-7 max-w-7xl w-full mx-auto">
           {renderActivePage()}
         </main>
       </div>

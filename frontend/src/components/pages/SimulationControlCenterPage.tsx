@@ -7,6 +7,9 @@ import {
   Plus,
   Trash2,
   Activity,
+  Sliders,
+  Settings,
+  Zap,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -124,128 +127,196 @@ export function SimulationControlCenterPage() {
     setInjections((prev) => [
       ...prev,
       {
-        anomaly_type: 'spike',
+        anomaly_type: 'drift',
         target_channels: ['vibration'],
-        magnitude: 4.0,
-        duration_steps: 5,
-        start_step: 15,
+        magnitude: 3.0,
+        duration_steps: 10,
+        start_step: 20,
       },
     ]);
   };
 
-  const removeInjection = (index: number) => {
-    setInjections((prev) => prev.filter((_, i) => i !== index));
+  const removeInjection = (idx: number) => {
+    setInjections((prev) => prev.filter((_, i) => i !== idx));
   };
-
-  const isRunning = status?.status === 'running';
-  const isPaused = status?.status === 'paused';
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200/90 rounded-xl p-5 shadow-card">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-tight">Software IoT Simulation Control Center</h2>
-          <p className="text-xs text-slate-400">
-            Configure multivariate virtual sensors, frequency parameters, playback speed, and inject controlled synthetic anomalies.
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-bold text-slate-900 tracking-tight">
+              IoT Simulation & Fault Injection Control
+            </h2>
+            <Badge
+              variant={
+                status?.status === 'running'
+                  ? 'success'
+                  : status?.status === 'paused'
+                  ? 'warning'
+                  : 'secondary'
+              }
+              className="capitalize text-xs font-mono"
+            >
+              Session: {status?.status || 'stopped'}
+            </Badge>
+          </div>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Configure virtual industrial sensor devices, synthetic disturbance injectors, and playback frequency.
           </p>
         </div>
+
+        {/* Global Controls */}
         <div className="flex items-center gap-2">
-          {isRunning ? (
-            <>
-              <Button size="sm" variant="outline" onClick={handlePause} disabled={actionLoading} className="text-xs">
-                <Pause className="w-3.5 h-3.5 mr-1" /> Pause
-              </Button>
-              <Button size="sm" variant="destructive" onClick={handleStop} disabled={actionLoading} className="text-xs">
-                <Square className="w-3.5 h-3.5 mr-1" /> Terminate Session
-              </Button>
-            </>
-          ) : isPaused ? (
-            <>
-              <Button size="sm" onClick={handleResume} disabled={actionLoading} className="text-xs bg-emerald-600">
-                <Play className="w-3.5 h-3.5 mr-1" /> Resume
-              </Button>
-              <Button size="sm" variant="destructive" onClick={handleStop} disabled={actionLoading} className="text-xs">
-                <Square className="w-3.5 h-3.5 mr-1" /> Terminate
-              </Button>
-            </>
+          {status?.status === 'running' ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handlePause}
+              disabled={actionLoading}
+              className="text-xs"
+            >
+              <Pause className="w-3.5 h-3.5 mr-1 text-amber-600" /> Pause
+            </Button>
+          ) : status?.status === 'paused' ? (
+            <Button
+              size="sm"
+              onClick={handleResume}
+              disabled={actionLoading}
+              className="text-xs bg-emerald-600 text-white"
+            >
+              <Play className="w-3.5 h-3.5 mr-1" /> Resume
+            </Button>
           ) : (
-            <Button size="sm" onClick={handleStart} disabled={actionLoading} className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white">
-              <Play className="w-3.5 h-3.5 mr-1" /> Launch Simulation
+            <Button
+              size="sm"
+              onClick={handleStart}
+              disabled={actionLoading}
+              className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              <Play className="w-3.5 h-3.5 mr-1" /> Launch Session
             </Button>
           )}
-          <Button size="sm" variant="ghost" onClick={handleReset} disabled={actionLoading} className="text-xs text-slate-400">
-            <RotateCcw className="w-3.5 h-3.5" />
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleStop}
+            disabled={actionLoading || status?.status === 'stopped'}
+            className="text-xs text-rose-600 hover:text-rose-700"
+          >
+            <Square className="w-3.5 h-3.5 mr-1" /> Stop
+          </Button>
+
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleReset}
+            disabled={actionLoading}
+            className="text-xs text-slate-600 hover:text-slate-900"
+            title="Reset telemetry counters and devices"
+          >
+            <RotateCcw className="w-3.5 h-3.5 mr-1" /> Reset
           </Button>
         </div>
       </div>
 
-      {/* Real-time Status Card */}
+      {/* Simulator Metrics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
-          title="Session Status"
-          value={(status?.status || 'stopped').toUpperCase()}
-          subtitle={`Session: ${status?.simulation_id || 'None'}`}
-          badge={
-            <Badge variant={isRunning ? 'success' : isPaused ? 'warning' : 'outline'} className="capitalize">
-              {status?.status || 'stopped'}
-            </Badge>
-          }
-        />
-        <MetricCard
-          title="Execution Uptime"
-          value={`${status?.uptime_seconds ?? 0}s`}
-          subtitle="Continuous generation time"
+          title="Generated Frames"
+          value={status?.metrics?.generated_count ?? 0}
+          subtitle="Synthesized telemetry frames"
           icon={Activity}
         />
         <MetricCard
-          title="Telemetry Generated"
-          value={status?.metrics?.generated_count ?? 0}
-          subtitle={`Persisted: ${status?.metrics?.persisted_count ?? 0}`}
+          title="Inferences Run"
+          value={status?.metrics?.inferred_count ?? 0}
+          subtitle="Model predictions executed"
+          icon={Zap}
         />
         <MetricCard
-          title="Connected WS Clients"
-          value={status?.connected_ws_clients ?? 0}
-          subtitle="Listening on WebSocket feed"
+          title="Detected Anomalies"
+          value={status?.metrics?.anomalies_detected ?? 0}
+          subtitle="Outliers flagged"
+          icon={Sliders}
+        />
+        <MetricCard
+          title="Avg Inference Time"
+          value={
+            status?.metrics?.avg_latency_ms
+              ? `${status.metrics.avg_latency_ms.toFixed(2)} ms`
+              : '0.00 ms'
+          }
+          subtitle={`Throughput: ${(status?.metrics?.throughput_rps || 0).toFixed(1)} rps`}
+          icon={Settings}
         />
       </div>
 
-      {/* Control & Configuration Form */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Simulation Parameters */}
-        <div className="lg:col-span-6 space-y-4">
-          <Card className="bg-slate-900/60 border-slate-800">
+        {/* Session Configuration Card */}
+        <div className="lg:col-span-7 space-y-4">
+          <Card>
             <CardHeader>
-              <CardTitle className="text-sm font-semibold text-white">Simulation Setup & Runtime Parameters</CardTitle>
+              <CardTitle className="text-sm font-semibold text-slate-900">
+                Simulation Parameters & Target Pipeline
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <label className="text-xs text-slate-400 block mb-1">Target Virtual Devices (comma separated)</label>
-                <input
-                  type="text"
-                  value={devicesInput}
-                  onChange={(e) => setDevicesInput(e.target.value)}
-                  disabled={isRunning || isPaused}
-                  className="w-full bg-slate-800 text-xs text-white rounded p-2.5 border border-slate-700 outline-none"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-medium text-slate-600 block mb-1">
+                    Virtual Devices (comma-separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={devicesInput}
+                    onChange={(e) => setDevicesInput(e.target.value)}
+                    disabled={status?.status === 'running'}
+                    className="w-full bg-slate-50 text-xs text-slate-800 rounded-lg p-2.5 border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-slate-600 block mb-1">
+                    Active ML Inference Model
+                  </label>
+                  <select
+                    value={modelName}
+                    onChange={(e) => setModelName(e.target.value)}
+                    disabled={status?.status === 'running'}
+                    className="w-full bg-slate-50 text-xs text-slate-800 rounded-lg p-2.5 border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="isolation_forest">Isolation Forest (v1.0.0)</option>
+                    <option value="one_class_svm">One-Class SVM (v1.0.0)</option>
+                    <option value="lof">Local Outlier Factor (v1.0.0)</option>
+                    <option value="autoencoder">Deep Autoencoder (PyTorch)</option>
+                  </select>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="text-xs text-slate-400 block mb-1">Sampling Frequency (Hz)</label>
+                  <label className="text-xs font-medium text-slate-600 block mb-1">
+                    Sampling Rate (Hz)
+                  </label>
                   <input
                     type="number"
                     step="0.5"
                     min="0.5"
-                    max="50"
+                    max="20"
                     value={samplingRate}
                     onChange={(e) => setSamplingRate(Number(e.target.value))}
-                    disabled={isRunning || isPaused}
-                    className="w-full bg-slate-800 text-xs text-white rounded p-2.5 border border-slate-700 outline-none"
+                    disabled={status?.status === 'running'}
+                    className="w-full bg-slate-50 text-xs text-slate-800 rounded-lg p-2.5 border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
                   />
                 </div>
+
                 <div>
-                  <label className="text-xs text-slate-400 block mb-1">Playback Speed Multiplier</label>
+                  <label className="text-xs font-medium text-slate-600 block mb-1">
+                    Playback Speed (x)
+                  </label>
                   <input
                     type="number"
                     step="0.5"
@@ -253,147 +324,93 @@ export function SimulationControlCenterPage() {
                     max="10"
                     value={playbackSpeed}
                     onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
-                    disabled={isRunning || isPaused}
-                    className="w-full bg-slate-800 text-xs text-white rounded p-2.5 border border-slate-700 outline-none"
+                    disabled={status?.status === 'running'}
+                    className="w-full bg-slate-50 text-xs text-slate-800 rounded-lg p-2.5 border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs text-slate-400 block mb-1">Random Seed (RNG)</label>
+                  <label className="text-xs font-medium text-slate-600 block mb-1">
+                    Random Seed
+                  </label>
                   <input
                     type="number"
                     value={randomSeed}
                     onChange={(e) => setRandomSeed(Number(e.target.value))}
-                    disabled={isRunning || isPaused}
-                    className="w-full bg-slate-800 text-xs text-white rounded p-2.5 border border-slate-700 outline-none"
+                    disabled={status?.status === 'running'}
+                    className="w-full bg-slate-50 text-xs text-slate-800 rounded-lg p-2.5 border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
                   />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-400 block mb-1">Inference Model</label>
-                  <select
-                    value={modelName}
-                    onChange={(e) => setModelName(e.target.value)}
-                    disabled={isRunning || isPaused}
-                    className="w-full bg-slate-800 text-xs text-white rounded p-2.5 border border-slate-700 outline-none"
-                  >
-                    <option value="isolation_forest">Isolation Forest</option>
-                    <option value="one_class_svm">One-Class SVM</option>
-                    <option value="lof">Local Outlier Factor</option>
-                  </select>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 pt-2">
                 <input
                   type="checkbox"
-                  id="persist-db"
+                  id="persistCheck"
                   checked={persistToDb}
                   onChange={(e) => setPersistToDb(e.target.checked)}
-                  disabled={isRunning || isPaused}
-                  className="rounded bg-slate-800 border-slate-700"
+                  disabled={status?.status === 'running'}
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                 />
-                <label htmlFor="persist-db" className="text-xs text-slate-300">
-                  Persist generated telemetry & flagged anomalies directly into MongoDB
+                <label htmlFor="persistCheck" className="text-xs text-slate-700 font-medium">
+                  Persist generated telemetry & inference records to MongoDB
                 </label>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Anomaly Injections */}
-        <div className="lg:col-span-6 space-y-4">
-          <Card className="bg-slate-900/60 border-slate-800">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-sm font-semibold text-white">Controlled Anomaly Injections</CardTitle>
-                <p className="text-xs text-slate-400">Inject spikes, drifts, noise, or freezes at designated step offsets</p>
-              </div>
+        {/* Anomaly Injections Config Card */}
+        <div className="lg:col-span-5 space-y-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-semibold text-slate-900">
+                Disturbance & Fault Injections
+              </CardTitle>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={addInjection}
-                disabled={isRunning || isPaused}
-                className="text-xs"
+                disabled={status?.status === 'running'}
+                className="text-xs h-7 px-2"
               >
-                <Plus className="w-3.5 h-3.5 mr-1" /> Add Injection
+                <Plus className="w-3 h-3 mr-1 text-blue-600" /> Add Rule
               </Button>
             </CardHeader>
             <CardContent className="space-y-3">
               {injections.length === 0 ? (
-                <div className="p-6 text-center text-xs text-slate-500">
-                  No anomaly injections configured. The simulator will stream normal baseline telemetry.
+                <div className="text-center py-6 text-xs text-slate-400">
+                  No anomaly injections configured (Clean stream mode).
                 </div>
               ) : (
                 injections.map((inj, idx) => (
                   <div
                     key={idx}
-                    className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 space-y-2 text-xs"
+                    className="p-3 rounded-lg bg-slate-50 border border-slate-200/90 text-xs space-y-2 relative"
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-white">Injection #{idx + 1}</span>
-                      <button
-                        onClick={() => removeInjection(idx)}
-                        disabled={isRunning || isPaused}
-                        className="text-slate-500 hover:text-rose-400"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                    <button
+                      onClick={() => removeInjection(idx)}
+                      disabled={status?.status === 'running'}
+                      className="absolute top-2.5 right-2.5 text-slate-400 hover:text-rose-600"
+                      title="Remove injection rule"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-800 uppercase tracking-wider text-[10px]">
+                        Fault #{idx + 1}
+                      </span>
+                      <Badge variant="outline" className="text-[10px] uppercase font-mono">
+                        {inj.anomaly_type}
+                      </Badge>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">TYPE</span>
-                        <select
-                          value={inj.anomaly_type}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setInjections((prev) =>
-                              prev.map((item, i) => (i === idx ? { ...item, anomaly_type: val } : item)),
-                            );
-                          }}
-                          disabled={isRunning || isPaused}
-                          className="bg-slate-800 text-[11px] text-white rounded p-1 w-full border border-slate-700"
-                        >
-                          <option value="spike">Spike</option>
-                          <option value="drift">Drift</option>
-                          <option value="noise">Noise</option>
-                          <option value="freeze">Freeze</option>
-                          <option value="regime_shift">Regime Shift</option>
-                        </select>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">OFFSET (STEP)</span>
-                        <input
-                          type="number"
-                          value={inj.start_step}
-                          onChange={(e) => {
-                            const val = Number(e.target.value);
-                            setInjections((prev) =>
-                              prev.map((item, i) => (i === idx ? { ...item, start_step: val } : item)),
-                            );
-                          }}
-                          disabled={isRunning || isPaused}
-                          className="bg-slate-800 text-[11px] text-white rounded p-1 w-full border border-slate-700"
-                        />
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">MAGNITUDE</span>
-                        <input
-                          type="number"
-                          step="0.5"
-                          value={inj.magnitude}
-                          onChange={(e) => {
-                            const val = Number(e.target.value);
-                            setInjections((prev) =>
-                              prev.map((item, i) => (i === idx ? { ...item, magnitude: val } : item)),
-                            );
-                          }}
-                          disabled={isRunning || isPaused}
-                          className="bg-slate-800 text-[11px] text-white rounded p-1 w-full border border-slate-700"
-                        />
-                      </div>
+                    <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 font-mono">
+                      <div>Channel: {inj.target_channels.join(', ')}</div>
+                      <div>Magnitude: {inj.magnitude}x</div>
+                      <div>Start Step: {inj.start_step ?? 0}</div>
+                      <div>Duration: {inj.duration_steps ?? 5} steps</div>
                     </div>
                   </div>
                 ))

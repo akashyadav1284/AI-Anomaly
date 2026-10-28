@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle, RefreshCw, Filter, Sparkles } from 'lucide-react';
+import { CheckCircle, RefreshCw, Filter, Sparkles, ShieldAlert } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { apiService } from '@/services/api';
 import { AnomalyRecord, PredictionExplanation } from '@/types/api';
 
@@ -57,28 +58,41 @@ export function AnomalyInvestigationPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200/90 rounded-xl p-5 shadow-card">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-tight">Anomaly Incident Triage & Explainability</h2>
-          <p className="text-xs text-slate-400">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-bold text-slate-900 tracking-tight">
+              Anomaly Incident Triage & Explainability
+            </h2>
+            <Badge variant="outline" className="text-xs bg-slate-50 font-mono">
+              {anomalies.length} Flagged
+            </Badge>
+          </div>
+          <p className="text-xs text-slate-500 mt-0.5">
             Investigate flagged anomalies, model confidence thresholds, feature attribution, and audit review status.
           </p>
         </div>
-        <Button size="sm" variant="outline" onClick={fetchAnomalies} disabled={loading} className="text-xs">
-          <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={fetchAnomalies}
+          disabled={loading}
+          className="text-xs h-8"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? 'animate-spin text-blue-600' : ''}`} />
           Refresh
         </Button>
       </div>
 
       {/* Filter Toolbar */}
-      <div className="flex flex-wrap items-center gap-4 p-3 rounded-lg bg-slate-900/40 border border-slate-800 text-xs">
+      <div className="flex flex-wrap items-center gap-4 p-3.5 rounded-xl bg-white border border-slate-200/90 shadow-subtle text-xs">
         <div className="flex items-center gap-2">
-          <Filter className="w-3.5 h-3.5 text-slate-400" />
-          <span className="text-slate-400 font-medium">Severity:</span>
+          <Filter className="w-3.5 h-3.5 text-slate-500" />
+          <span className="text-slate-600 font-medium">Severity:</span>
           <select
             value={severityFilter}
             onChange={(e) => setSeverityFilter(e.target.value)}
-            className="bg-slate-800 text-white rounded px-2.5 py-1 border border-slate-700 outline-none"
+            className="bg-slate-50 text-xs text-slate-800 rounded-lg px-2.5 py-1.5 border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
             <option value="all">All Severities</option>
             <option value="critical">Critical</option>
@@ -89,226 +103,189 @@ export function AnomalyInvestigationPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-slate-400 font-medium">Status:</span>
+          <span className="text-slate-600 font-medium">Status:</span>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-slate-800 text-white rounded px-2.5 py-1 border border-slate-700 outline-none"
+            className="bg-slate-50 text-xs text-slate-800 rounded-lg px-2.5 py-1.5 border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
-            <option value="all">All Review States</option>
+            <option value="all">All Statuses</option>
             <option value="pending">Pending</option>
             <option value="under_review">Under Review</option>
-            <option value="confirmed">Confirmed</option>
+            <option value="confirmed">Confirmed Anomaly</option>
             <option value="false_positive">False Positive</option>
           </select>
         </div>
       </div>
 
-      {/* Main Split View: Incident List & Detail Panel */}
+      {/* Master/Detail Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left: Incident List Table */}
-        <div className="lg:col-span-7">
-          <Card className="bg-slate-900/60 border-slate-800">
-            <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-semibold text-white">Incident Queue</CardTitle>
-              <Badge variant="outline" className="font-mono text-[10px]">
-                {anomalies.length} TOTAL
-              </Badge>
+        {/* Anomaly Incidents List */}
+        <div className="lg:col-span-6 space-y-3">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold text-slate-900">
+                Incident Register
+              </CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
-                <table className="w-full text-left text-xs text-slate-300">
-                  <thead className="bg-slate-950/80 sticky top-0 text-slate-400 font-mono text-[10px] uppercase">
-                    <tr>
-                      <th className="py-2.5 px-3">Device</th>
-                      <th className="py-2.5 px-3">Timestamp</th>
-                      <th className="py-2.5 px-3">Score</th>
-                      <th className="py-2.5 px-3">Severity</th>
-                      <th className="py-2.5 px-3">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60">
-                    {anomalies.map((a) => {
-                      const isSelected = selectedAnomaly?.anomaly_id === a.anomaly_id;
-                      return (
-                        <tr
-                          key={a.anomaly_id}
-                          onClick={() => setSelectedAnomaly(a)}
-                          className={`cursor-pointer transition-colors ${
-                            isSelected ? 'bg-blue-600/15 border-l-2 border-blue-500' : 'hover:bg-slate-800/30'
-                          }`}
-                        >
-                          <td className="py-2.5 px-3 font-semibold text-white">{a.device_id}</td>
-                          <td className="py-2.5 px-3 font-mono text-[11px] text-slate-400">
-                            {new Date(a.timestamp).toLocaleTimeString()}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono font-bold text-rose-400">
-                            {(a.normalized_score * 100).toFixed(1)}%
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <Badge
-                              variant={
-                                a.severity === 'critical' || a.severity === 'high'
-                                  ? 'destructive'
-                                  : 'warning'
-                              }
-                              className="text-[10px] uppercase"
-                            >
-                              {a.severity}
-                            </Badge>
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <span className="text-[11px] text-slate-400 capitalize">
-                              {a.review_status.replace('_', ' ')}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+            <CardContent>
+              {anomalies.length === 0 ? (
+                <EmptyState
+                  icon={CheckCircle}
+                  title="No Incident Logs Found"
+                  description="No anomalies match your active filter criteria."
+                />
+              ) : (
+                <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
+                  {anomalies.map((anom) => {
+                    const isSelected = selectedAnomaly?.anomaly_id === anom.anomaly_id;
+                    return (
+                      <div
+                        key={anom.anomaly_id}
+                        onClick={() => setSelectedAnomaly(anom)}
+                        className={`p-3.5 rounded-lg border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-blue-50/70 border-blue-300 shadow-subtle'
+                            : 'bg-white hover:bg-slate-50 border-slate-200/90'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="font-semibold text-slate-900 text-xs font-mono">
+                            {anom.device_id}
+                          </span>
+                          <Badge
+                            variant={
+                              anom.severity === 'critical'
+                                ? 'destructive'
+                                : anom.severity === 'high'
+                                ? 'warning'
+                                : 'secondary'
+                            }
+                            className="text-[10px] uppercase font-mono"
+                          >
+                            {anom.severity}
+                          </Badge>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono">
+                          <span>{new Date(anom.timestamp).toLocaleString()}</span>
+                          <span className="font-semibold text-slate-800">
+                            Confidence: {(anom.normalized_score * 100).toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Right: Inspection & Explanation Panel */}
-        <div className="lg:col-span-5">
+        {/* Selected Incident Deep-Dive */}
+        <div className="lg:col-span-6 space-y-4">
           {selectedAnomaly ? (
-            <Card className="bg-slate-900/60 border-slate-800 sticky top-6">
-              <CardHeader className="pb-3 border-b border-slate-800">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 text-rose-400" />
-                    <CardTitle className="text-sm font-bold text-white">
-                      Incident {selectedAnomaly.anomaly_id}
-                    </CardTitle>
-                  </div>
-                  <Badge variant="outline" className="font-mono text-[10px]">
-                    {selectedAnomaly.model_name}
-                  </Badge>
-                </div>
-                <p className="text-[11px] text-slate-400">
-                  Detected on {new Date(selectedAnomaly.timestamp).toLocaleString()}
-                </p>
-              </CardHeader>
-              <CardContent className="pt-4 space-y-4">
-                {/* Score vs Threshold Metrics */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
-                    <span className="text-[10px] text-slate-400 uppercase font-mono block">
-                      Anomaly Likelihood
-                    </span>
-                    <span className="text-xl font-bold font-mono text-rose-400">
-                      {(selectedAnomaly.normalized_score * 100).toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
-                    <span className="text-[10px] text-slate-400 uppercase font-mono block">
-                      Decision Threshold
-                    </span>
-                    <span className="text-xl font-bold font-mono text-slate-300">
-                      {(selectedAnomaly.threshold * 100).toFixed(1)}%
-                    </span>
-                  </div>
-                </div>
-
-                {/* Explainability Breakdown */}
-                <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 space-y-2">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    Model Explainability Attribution
-                  </div>
-                  {explanationObj ? (
-                    <div className="space-y-2 text-xs">
-                      <p className="text-[11px] text-slate-400">
-                        Primary driver:{' '}
-                        <span className="text-amber-400 font-semibold font-mono">
-                          {explanationObj.primary_contributing_feature}
-                        </span>
-                      </p>
-                      <div className="space-y-1.5">
-                        {explanationObj.top_contributions.map((c) => (
-                          <div key={c.feature} className="flex items-center justify-between text-[11px]">
-                            <span className="text-slate-300 font-mono">{c.feature}</span>
-                            <div className="flex items-center gap-2">
-                              <span className="text-slate-400 font-mono">
-                                Dev: {c.deviation?.toFixed(2) ?? '—'}σ
-                              </span>
-                              <span className="text-rose-400 font-mono font-semibold">
-                                {(c.score * 100).toFixed(0)}%
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-400">
-                      {typeof selectedAnomaly.explanation === 'string'
-                        ? selectedAnomaly.explanation
-                        : 'No detailed feature attribution available.'}
-                    </p>
-                  )}
-                </div>
-
-                {/* Affected Channels */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
                 <div>
-                  <span className="text-[11px] text-slate-400 font-mono uppercase block mb-1.5">
-                    Flagged Channels
+                  <CardTitle className="text-sm font-semibold text-slate-900">
+                    Incident Forensic Analysis
+                  </CardTitle>
+                  <p className="text-[11px] font-mono text-slate-500 mt-0.5">
+                    ID: {selectedAnomaly.anomaly_id}
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-xs uppercase font-mono">
+                  {selectedAnomaly.review_status.replace('_', ' ')}
+                </Badge>
+              </CardHeader>
+              <CardContent className="space-y-4 text-xs">
+                {/* Affected Channels */}
+                <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block mb-2">
+                    Affected Sensor Channels
                   </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {selectedAnomaly.affected_features.map((f) => (
-                      <span
-                        key={f}
-                        className="px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs font-mono"
-                      >
-                        {f}
-                      </span>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedAnomaly.affected_features.map((feat) => (
+                      <Badge key={feat} variant="secondary" className="font-mono text-xs capitalize">
+                        {feat}
+                      </Badge>
                     ))}
                   </div>
                 </div>
 
-                {/* Review Workflow Controls */}
-                <div className="pt-2 border-t border-slate-800 space-y-2">
-                  <span className="text-[11px] text-slate-400 font-medium block">
-                    Update Investigation Status:
-                  </span>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={updatingStatus || selectedAnomaly.review_status === 'under_review'}
-                      onClick={() => handleUpdateStatus('under_review')}
-                      className="text-xs flex-1"
-                    >
-                      Under Review
-                    </Button>
-                    <Button
-                      size="sm"
-                      disabled={updatingStatus || selectedAnomaly.review_status === 'confirmed'}
-                      onClick={() => handleUpdateStatus('confirmed')}
-                      className="text-xs flex-1 bg-rose-600 hover:bg-rose-500 text-white"
-                    >
-                      <CheckCircle className="w-3.5 h-3.5 mr-1" /> Confirm
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={updatingStatus || selectedAnomaly.review_status === 'false_positive'}
-                      onClick={() => handleUpdateStatus('false_positive')}
-                      className="text-xs flex-1 text-slate-400 hover:text-white"
-                    >
-                      Dismiss (FP)
-                    </Button>
+                {/* Model Attribution & Explainability */}
+                <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
+                  <div className="flex items-center gap-1.5 text-slate-800 font-bold text-[11px] uppercase tracking-wider">
+                    <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                    Model Decision Attribution
                   </div>
+
+                  {explanationObj && explanationObj.top_contributions ? (
+                    <div className="space-y-1.5 pt-1">
+                      {explanationObj.top_contributions.map((contrib) => {
+                        const pct = Math.min(100, Math.max(0, contrib.score * 100));
+                        return (
+                          <div key={contrib.feature} className="space-y-0.5">
+                            <div className="flex justify-between text-[11px] font-mono">
+                              <span className="text-slate-600 capitalize">{contrib.feature}</span>
+                              <span className="font-semibold text-slate-900">{pct.toFixed(1)}%</span>
+                            </div>
+                            <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-blue-600 rounded-full"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-500">
+                      Standard isolation partition score. Multivariate anomaly detected across active telemetry channels.
+                    </p>
+                  )}
+                </div>
+
+                {/* Triage Decision Actions */}
+                <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-2">
+                  <span className="text-slate-500 text-xs font-medium">Update Status:</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleUpdateStatus('under_review')}
+                    disabled={updatingStatus}
+                    className="text-xs h-7.5"
+                  >
+                    Under Review
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => handleUpdateStatus('confirmed')}
+                    disabled={updatingStatus}
+                    className="text-xs h-7.5 bg-rose-600 hover:bg-rose-700 text-white"
+                  >
+                    Confirm Anomaly
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleUpdateStatus('false_positive')}
+                    disabled={updatingStatus}
+                    className="text-xs h-7.5 text-emerald-700 hover:bg-emerald-50"
+                  >
+                    False Positive
+                  </Button>
                 </div>
               </CardContent>
             </Card>
           ) : (
-            <Card className="bg-slate-900/60 border-slate-800 p-8 text-center text-xs text-slate-500">
-              Select an incident from the queue to inspect root-cause attribution.
-            </Card>
+            <EmptyState
+              icon={ShieldAlert}
+              title="Select an Incident"
+              description="Choose an incident record from the register to inspect feature values and explainability."
+            />
           )}
         </div>
       </div>

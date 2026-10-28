@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Plus, RefreshCw } from 'lucide-react';
+import { Plus, RefreshCw, GitCompare } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { apiService } from '@/services/api';
 import { ExperimentItem } from '@/types/api';
 
@@ -47,23 +48,38 @@ export function ExperimentComparisonPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200/90 rounded-xl p-5 shadow-card">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-tight">Experiment Tracking & Comparison</h2>
-          <p className="text-xs text-slate-400">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-bold text-slate-900 tracking-tight">
+              Experiment Tracking & Model Comparison
+            </h2>
+            <Badge variant="outline" className="text-xs bg-slate-50 font-mono">
+              {experiments.length} Runs
+            </Badge>
+          </div>
+          <p className="text-xs text-slate-500 mt-0.5">
             Compare offline model runs, hyperparameter sweeps, and out-of-sample evaluation metrics.
           </p>
         </div>
-        <Button size="sm" variant="outline" onClick={fetchExperiments} disabled={loading} className="text-xs">
-          <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={fetchExperiments}
+          disabled={loading}
+          className="text-xs h-8"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? 'animate-spin text-blue-600' : ''}`} />
           Refresh
         </Button>
       </div>
 
       {/* New Experiment Form */}
-      <Card className="bg-slate-900/60 border-slate-800">
-        <CardHeader>
-          <CardTitle className="text-sm font-semibold text-white">Create New Experiment Run</CardTitle>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold text-slate-900">
+            Create New Experiment Run
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleCreateExperiment} className="flex flex-wrap items-center gap-3">
@@ -72,83 +88,94 @@ export function ExperimentComparisonPage() {
               placeholder="Experiment run name (e.g. IF_contam_0.05)"
               value={newExpName}
               onChange={(e) => setNewExpName(e.target.value)}
-              className="bg-slate-800 text-xs text-white rounded px-3 py-2 border border-slate-700 outline-none flex-1 min-w-[200px]"
+              className="bg-slate-50 text-xs text-slate-800 rounded-lg px-3 py-2 border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 flex-1 min-w-[220px] font-mono"
             />
             <select
               value={selectedAlgo}
               onChange={(e) => setSelectedAlgo(e.target.value)}
-              className="bg-slate-800 text-xs text-white rounded px-3 py-2 border border-slate-700 outline-none"
+              className="bg-slate-50 text-xs text-slate-800 rounded-lg px-3 py-2 border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
             >
               <option value="isolation_forest">Isolation Forest</option>
               <option value="one_class_svm">One-Class SVM</option>
               <option value="lof">Local Outlier Factor</option>
-              <option value="autoencoder">Deep Autoencoder</option>
             </select>
             <Button
               type="submit"
-              size="sm"
               disabled={isSubmitting || !newExpName.trim()}
-              className="text-xs bg-blue-600 hover:bg-blue-500 text-white"
+              className="text-xs bg-blue-600 hover:bg-blue-700 text-white"
             >
-              <Plus className="w-3.5 h-3.5 mr-1" /> Log Experiment
+              <Plus className="w-3.5 h-3.5 mr-1" />
+              {isSubmitting ? 'Recording Run...' : 'Register Run'}
             </Button>
           </form>
         </CardContent>
       </Card>
 
-      {/* Comparison Table */}
-      <Card className="bg-slate-900/60 border-slate-800">
+      {/* Experiments Comparison Matrix Table */}
+      <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <div>
-            <CardTitle className="text-sm font-semibold text-white">Experiment Runs</CardTitle>
-            <p className="text-xs text-slate-400">Benchmarked against holdout test partition</p>
+            <CardTitle className="text-sm font-semibold text-slate-900">
+              Benchmark Evaluation Matrix
+            </CardTitle>
+            <p className="text-xs text-slate-500">Cross-algorithm precision, recall, and F1 scores</p>
           </div>
-          <Badge variant="outline" className="font-mono text-xs">
-            {experiments.length} RUNS
-          </Badge>
         </CardHeader>
         <CardContent>
           {experiments.length === 0 ? (
-            <div className="p-8 text-center text-xs text-slate-500">
-              No experiment runs logged yet. Create your first experiment above.
-            </div>
+            <EmptyState
+              icon={GitCompare}
+              title="No Experiment Runs Recorded"
+              description="Register an offline experiment above to benchmark model metrics."
+            />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-950/80 text-slate-400 font-mono text-[10px] uppercase">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px] font-semibold">
                   <tr>
-                    <th className="py-2.5 px-3">Experiment</th>
+                    <th className="py-2.5 px-3">Run ID / Name</th>
                     <th className="py-2.5 px-3">Model</th>
-                    <th className="py-2.5 px-3">Dataset</th>
-                    <th className="py-2.5 px-3">Status</th>
                     <th className="py-2.5 px-3">Precision</th>
                     <th className="py-2.5 px-3">Recall</th>
                     <th className="py-2.5 px-3">F1 Score</th>
-                    <th className="py-2.5 px-3">Created</th>
+                    <th className="py-2.5 px-3">PR-AUC</th>
+                    <th className="py-2.5 px-3">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60 font-mono text-[11px]">
+                <tbody className="divide-y divide-slate-100 font-mono">
                   {experiments.map((exp) => (
-                    <tr key={exp.experiment_id} className="hover:bg-slate-800/30">
-                      <td className="py-2.5 px-3 font-semibold text-white">{exp.name}</td>
-                      <td className="py-2.5 px-3 text-blue-400">{exp.model_name}</td>
-                      <td className="py-2.5 px-3 text-slate-400">{exp.dataset_id}</td>
+                    <tr key={exp.experiment_id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="py-2.5 px-3 font-semibold text-slate-900">
+                        {exp.name || exp.experiment_id}
+                      </td>
+                      <td className="py-2.5 px-3 capitalize text-slate-700">
+                        {exp.model_name.replace('_', ' ')}
+                      </td>
                       <td className="py-2.5 px-3">
-                        <Badge variant="outline" className="text-[10px] capitalize">
+                        {exp.metrics?.precision !== undefined
+                          ? exp.metrics.precision.toFixed(3)
+                          : '—'}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        {exp.metrics?.recall !== undefined
+                          ? exp.metrics.recall.toFixed(3)
+                          : '—'}
+                      </td>
+                      <td className="py-2.5 px-3 font-semibold text-slate-900">
+                        {exp.metrics?.f1_score !== undefined ? exp.metrics.f1_score.toFixed(3) : '—'}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        {exp.metrics?.pr_auc !== undefined
+                          ? exp.metrics.pr_auc.toFixed(3)
+                          : '—'}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <Badge
+                          variant={exp.status === 'completed' ? 'success' : 'outline'}
+                          className="text-[10px] uppercase font-mono"
+                        >
                           {exp.status}
                         </Badge>
-                      </td>
-                      <td className="py-2.5 px-3 text-emerald-400">
-                        {exp.metrics?.precision ? (exp.metrics.precision * 100).toFixed(1) + '%' : '94.2%'}
-                      </td>
-                      <td className="py-2.5 px-3 text-sky-400">
-                        {exp.metrics?.recall ? (exp.metrics.recall * 100).toFixed(1) + '%' : '91.8%'}
-                      </td>
-                      <td className="py-2.5 px-3 text-indigo-400 font-bold">
-                        {exp.metrics?.f1_score ? (exp.metrics.f1_score * 100).toFixed(1) + '%' : '93.0%'}
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-500">
-                        {new Date(exp.created_at).toLocaleDateString()}
                       </td>
                     </tr>
                   ))}

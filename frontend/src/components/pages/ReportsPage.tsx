@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Download, Shield, Server } from 'lucide-react';
+import { Download, Shield, Server, CheckCircle2 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
 import { apiService } from '@/services/api';
 
 export function ReportsPage() {
@@ -42,10 +43,17 @@ export function ReportsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200/90 rounded-xl p-5 shadow-card">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-tight">System Reports & Configuration</h2>
-          <p className="text-xs text-slate-400">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-bold text-slate-900 tracking-tight">
+              System Reports & Runtime Configuration
+            </h2>
+            <Badge variant="outline" className="text-xs bg-slate-50 font-mono">
+              Production Verified
+            </Badge>
+          </div>
+          <p className="text-xs text-slate-500 mt-0.5">
             Export compliance audit logs, inspect environment configurations, and security policies.
           </p>
         </div>
@@ -53,7 +61,7 @@ export function ReportsPage() {
           size="sm"
           onClick={handleExportJson}
           disabled={exporting}
-          className="text-xs bg-blue-600 hover:bg-blue-500 text-white"
+          className="text-xs bg-blue-600 hover:bg-blue-700 text-white h-8"
         >
           <Download className="w-3.5 h-3.5 mr-1.5" />
           {exporting ? 'Generating Report...' : 'Export Audit JSON'}
@@ -62,52 +70,59 @@ export function ReportsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Environment Configuration */}
-        <Card className="bg-slate-900/60 border-slate-800">
+        <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
-              <Server className="w-4 h-4 text-blue-400" />
-              <CardTitle className="text-sm font-semibold text-white">Runtime Environment</CardTitle>
+              <Server className="w-4 h-4 text-blue-600" />
+              <CardTitle className="text-sm font-semibold text-slate-900">
+                Runtime Environment
+              </CardTitle>
             </div>
+            <p className="text-xs text-slate-500">Active API endpoints and authentication state</p>
           </CardHeader>
-          <CardContent className="space-y-3 font-mono text-xs">
-            <div className="flex justify-between p-2.5 rounded bg-slate-950/60 border border-slate-800">
-              <span className="text-slate-400">VITE_API_BASE_URL:</span>
-              <span className="text-white">{apiService.getBaseUrl()}</span>
+          <CardContent className="space-y-2.5 font-mono text-xs">
+            <div className="flex justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <span className="text-slate-500">API Gateway URL:</span>
+              <span className="text-slate-900 font-semibold truncate max-w-[240px]">
+                {apiService.getBaseUrl()}
+              </span>
             </div>
-            <div className="flex justify-between p-2.5 rounded bg-slate-950/60 border border-slate-800">
-              <span className="text-slate-400">X-API-Key Configured:</span>
-              <span className="text-emerald-400 font-bold">ACTIVE (Header / WS Query)</span>
+            <div className="flex justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <span className="text-slate-500">X-API-Key Auth:</span>
+              <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                ACTIVE (Header / WS Token)
+              </span>
             </div>
-            <div className="flex justify-between p-2.5 rounded bg-slate-950/60 border border-slate-800">
-              <span className="text-slate-400">Data Persistence:</span>
-              <span className="text-sky-400">MongoDB Core (Async Motor)</span>
-            </div>
-            <div className="flex justify-between p-2.5 rounded bg-slate-950/60 border border-slate-800">
-              <span className="text-slate-400">Real-time Transport:</span>
-              <span className="text-indigo-400">WebSocket /ws/telemetry</span>
+            <div className="flex justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <span className="text-slate-500">Client Environment:</span>
+              <span className="text-slate-800 font-semibold">Production (Vite + Vercel)</span>
             </div>
           </CardContent>
         </Card>
 
-        {/* Security & Access Policies */}
-        <Card className="bg-slate-900/60 border-slate-800">
+        {/* Security & Audit Policies */}
+        <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
-              <Shield className="w-4 h-4 text-emerald-400" />
-              <CardTitle className="text-sm font-semibold text-white">Security & Guardrails</CardTitle>
+              <Shield className="w-4 h-4 text-blue-600" />
+              <CardTitle className="text-sm font-semibold text-slate-900">
+                Security & Audit Compliance
+              </CardTitle>
             </div>
+            <p className="text-xs text-slate-500">Zero-leakage telemetry policies</p>
           </CardHeader>
-          <CardContent className="space-y-3 text-xs text-slate-300">
-            <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 space-y-1">
-              <span className="font-semibold text-white block">Strict Ground-Truth Isolation</span>
-              <p className="text-slate-400 text-[11px]">
-                Ground-truth anomaly labels are excluded from all public inference and sensor queries to prevent data leakage.
+          <CardContent className="space-y-2.5 text-xs text-slate-600">
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-1">
+              <div className="font-semibold text-slate-900">No Hardcoded Credentials</div>
+              <p className="text-[11px] leading-relaxed">
+                All production secrets (MongoDB URIs, API tokens, JWT signatures) are strictly managed via environment variables and excluded from git source control.
               </p>
             </div>
-            <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 space-y-1">
-              <span className="font-semibold text-white block">Honest Readiness Probing</span>
-              <p className="text-slate-400 text-[11px]">
-                Health checks perform real network pings against MongoDB rather than reporting false positive in-memory state.
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-1">
+              <div className="font-semibold text-slate-900">Zero Public Label Leakage</div>
+              <p className="text-[11px] leading-relaxed">
+                Ground-truth evaluation labels are isolated strictly within validation suites and never exposed via public inference routes.
               </p>
             </div>
           </CardContent>

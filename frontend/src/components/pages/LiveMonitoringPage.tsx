@@ -4,11 +4,11 @@ import {
   Pause,
   Square,
   RotateCcw,
-  Sliders,
   AlertOctagon,
   Radio,
   Wifi,
-  Clock,
+  Activity,
+  Layers,
 } from 'lucide-react';
 import {
   LineChart,
@@ -24,6 +24,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { MetricCard } from '@/components/ui/MetricCard';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { apiService } from '@/services/api';
 import { useSimulatorWebSocket } from '@/services/useWebSocket';
 
@@ -34,7 +35,6 @@ export function LiveMonitoringPage() {
     anomalyAlerts,
     latestTelemetry,
     reconnect,
-    clearAlerts,
   } = useSimulatorWebSocket(50);
 
   const [selectedSensor, setSelectedSensor] = useState<string>('all');
@@ -78,13 +78,11 @@ export function LiveMonitoringPage() {
             anomaly_type: 'spike',
             target_channels: ['temperature', 'vibration'],
             magnitude: 5.0,
-            duration_steps: 4,
-            start_step: 10,
+            duration_steps: 5,
+            start_step: 15,
           },
         ],
       });
-    } catch (e) {
-      alert(`Start failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
     } finally {
       setActionLoading(false);
     }
@@ -128,30 +126,33 @@ export function LiveMonitoringPage() {
 
   return (
     <div className="space-y-6">
-      {/* Live Header & Simulator Controls */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 rounded-xl bg-slate-900/80 border border-slate-800">
+      {/* Top Workspace Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200/90 rounded-xl p-5 shadow-card">
         <div>
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-bold text-white tracking-tight">Real-Time Telemetry Stream</h2>
-            <Badge variant={isConnected ? 'success' : 'destructive'} className="font-mono text-xs">
-              <Wifi className="w-3 h-3 mr-1" />
-              {isConnected ? 'LIVE FEED ACTIVE' : 'STREAM DISCONNECTED'}
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-bold text-slate-900 tracking-tight">Real-Time Telemetry Monitor</h2>
+            <Badge
+              variant={isConnected ? 'success' : 'secondary'}
+              className="flex items-center gap-1.5 text-xs font-mono"
+            >
+              <Radio className={`w-3.5 h-3.5 ${isConnected ? 'animate-pulse text-emerald-600' : 'text-slate-400'}`} />
+              {isConnected ? 'CONNECTED' : 'STANDBY'}
             </Badge>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Sub-second telemetry ingestion with synchronous Phase 3 anomaly scoring & attribution.
+          <p className="text-xs text-slate-500 mt-0.5">
+            Streaming live multivariate telemetry across virtual sensor nodes via WebSocket with inline ML inference.
           </p>
         </div>
 
-        {/* Action Controls */}
+        {/* Simulator Controls */}
         <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
             onClick={handleStart}
             disabled={actionLoading}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs"
+            className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
           >
-            <Play className="w-3.5 h-3.5 mr-1" /> Start Simulation
+            <Play className="w-3.5 h-3.5 mr-1" /> Start
           </Button>
           <Button
             size="sm"
@@ -173,10 +174,10 @@ export function LiveMonitoringPage() {
           </Button>
           <Button
             size="sm"
-            variant="destructive"
+            variant="outline"
             onClick={handleStop}
             disabled={actionLoading}
-            className="text-xs"
+            className="text-xs text-rose-600 hover:text-rose-700"
           >
             <Square className="w-3.5 h-3.5 mr-1" /> Stop
           </Button>
@@ -185,9 +186,10 @@ export function LiveMonitoringPage() {
             variant="ghost"
             onClick={handleReset}
             disabled={actionLoading}
-            className="text-xs text-slate-400 hover:text-white"
+            className="text-xs text-slate-500 hover:text-slate-900"
+            title="Reset simulation state"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <RotateCcw className="w-3.5 h-3.5 mr-1" /> Reset
           </Button>
         </div>
       </div>
@@ -195,219 +197,192 @@ export function LiveMonitoringPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
-          title="Active Channel"
-          value={selectedChannel.toUpperCase()}
-          subtitle="Selected telemetry variable"
+          title="Active Devices"
+          value={availableDevices.length > 0 ? availableDevices.length : '0'}
+          subtitle={availableDevices.join(', ') || 'No active nodes'}
           icon={Radio}
         />
         <MetricCard
-          title="Latest Reading"
-          value={
-            latestTelemetry?.features[selectedChannel] !== undefined
-              ? `${latestTelemetry.features[selectedChannel]}`
-              : '—'
-          }
-          subtitle={`Device: ${latestTelemetry?.device_id || 'Waiting...'}`}
-          icon={Clock}
+          title="Telemetry Buffer"
+          value={telemetryStream.length}
+          subtitle="Recent 50 samples cached"
+          icon={Layers}
         />
         <MetricCard
-          title="Model Anomaly Score"
+          title="Latest Anomaly Score"
           value={
-            latestTelemetry?.prediction
+            latestTelemetry
               ? `${(latestTelemetry.prediction.normalized_score * 100).toFixed(1)}%`
-              : '—'
+              : '0.0%'
           }
-          subtitle={`Threshold: ${(
-            (latestTelemetry?.prediction.threshold ?? 0.7) * 100
-          ).toFixed(1)}%`}
-          icon={AlertOctagon}
-          change={latestTelemetry?.prediction?.is_anomaly ? 'ANOMALY DETECTED' : 'NORMAL'}
-          changePositive={!latestTelemetry?.prediction?.is_anomaly}
+          subtitle={
+            latestTelemetry?.prediction.is_anomaly
+              ? 'Flagged as Outlier'
+              : 'Normal Operating Range'
+          }
+          changePositive={!latestTelemetry?.prediction.is_anomaly}
+          icon={Activity}
         />
         <MetricCard
-          title="Stream Buffer"
-          value={`${telemetryStream.length} / 50`}
-          subtitle="In-memory ring buffer frames"
-          icon={Sliders}
+          title="Active Alerts"
+          value={anomalyAlerts.length}
+          subtitle="Pending incident triage"
+          icon={AlertOctagon}
         />
       </div>
 
-      {/* Filter and Channel Selectors */}
-      <div className="flex flex-wrap items-center justify-between gap-4 p-3 rounded-lg bg-slate-900/40 border border-slate-800">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400 font-medium">Device:</span>
-          <select
-            value={selectedSensor}
-            onChange={(e) => setSelectedSensor(e.target.value)}
-            className="bg-slate-800 text-xs text-white rounded px-2.5 py-1.5 border border-slate-700 outline-none"
-          >
-            <option value="all">All Streamed Devices</option>
-            {availableDevices.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
-        </div>
+      {/* Filter Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-4 p-3.5 rounded-xl bg-white border border-slate-200/90 shadow-subtle text-xs">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-500 font-medium">Device:</span>
+            <select
+              value={selectedSensor}
+              onChange={(e) => setSelectedSensor(e.target.value)}
+              className="bg-slate-50 text-xs text-slate-800 rounded-lg px-2.5 py-1.5 border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="all">All Devices ({availableDevices.length})</option>
+              {availableDevices.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400 font-medium">Telemetry Channel:</span>
-          <div className="flex gap-1">
-            {['temperature', 'humidity', 'pressure', 'vibration', 'current'].map((ch) => (
-              <button
-                key={ch}
-                onClick={() => setSelectedChannel(ch)}
-                className={`px-2.5 py-1 rounded text-xs capitalize font-medium transition-colors ${
-                  selectedChannel === ch
-                    ? 'bg-blue-600 text-white font-semibold'
-                    : 'bg-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >
-                {ch}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <span className="text-slate-500 font-medium">Channel:</span>
+            <select
+              value={selectedChannel}
+              onChange={(e) => setSelectedChannel(e.target.value)}
+              className="bg-slate-50 text-xs text-slate-800 rounded-lg px-2.5 py-1.5 border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="temperature">Temperature (°C)</option>
+              <option value="humidity">Humidity (%)</option>
+              <option value="pressure">Pressure (kPa)</option>
+              <option value="vibration">Vibration (g)</option>
+              <option value="current">Current (A)</option>
+              <option value="anomalyScore">Anomaly Confidence (%)</option>
+            </select>
           </div>
         </div>
+
+        {!isConnected && (
+          <Button size="sm" variant="outline" onClick={reconnect} className="text-xs h-7.5">
+            <Wifi className="w-3.5 h-3.5 mr-1 text-blue-600" /> Reconnect WebSocket
+          </Button>
+        )}
       </div>
 
-      {/* Real-Time Telemetry Graph */}
-      <Card className="bg-slate-900/60 border-slate-800">
+      {/* Live Chart Container */}
+      <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <div>
-            <CardTitle className="text-sm font-semibold text-white">
-              Dynamic Telemetry & Synchronous Anomaly Scoring
+            <CardTitle className="text-sm font-semibold text-slate-900">
+              Live Sensor Signal Waveform — {selectedChannel.toUpperCase()}
             </CardTitle>
-            <p className="text-xs text-slate-400">
-              Blue line: Sensor physics value • Purple dashed line: Normalized anomaly score
-            </p>
+            <p className="text-xs text-slate-500">Continuous telemetry feed at configured sampling rate</p>
           </div>
-          {!isConnected && (
-            <Button size="sm" variant="outline" onClick={reconnect} className="text-xs">
-              Reconnect WebSocket
-            </Button>
-          )}
+          <Badge variant="outline" className="text-[10px] font-mono bg-slate-50">
+            {chartData.length} FRAMES
+          </Badge>
         </CardHeader>
-        <CardContent className="h-72 pt-4">
+        <CardContent>
           {chartData.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs">
-              <Radio className="w-8 h-8 text-slate-600 mb-2 animate-pulse" />
-              Waiting for incoming WebSocket telemetry frames...
-              <p className="text-[11px] text-slate-500 mt-1">
-                Click <strong>"Start Simulation"</strong> above to launch the virtual IoT generator.
-              </p>
-            </div>
+            <EmptyState
+              icon={Activity}
+              title="Awaiting Live Telemetry Stream"
+              description="Start the simulation engine or verify WebSocket connectivity to inspect live sensor readings."
+              actionLabel="Start Simulation"
+              onAction={handleStart}
+            />
           ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis dataKey="time" stroke="#64748b" fontSize={10} />
-                <YAxis yAxisId="left" stroke="#64748b" fontSize={10} />
-                <YAxis
-                  yAxisId="right"
-                  orientation="right"
-                  domain={[0, 100]}
-                  stroke="#a855f7"
-                  fontSize={10}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#0f172a',
-                    borderColor: '#334155',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: '11px' }} />
-                <Line
-                  yAxisId="left"
-                  type="monotone"
-                  dataKey={selectedChannel}
-                  stroke="#38bdf8"
-                  strokeWidth={2}
-                  dot={false}
-                  name={`${selectedChannel} (Units)`}
-                />
-                <Line
-                  yAxisId="right"
-                  type="monotone"
-                  dataKey="anomalyScore"
-                  stroke="#a855f7"
-                  strokeWidth={2}
-                  strokeDasharray="4 4"
-                  dot={{ r: 3, fill: '#ec4899' }}
-                  name="Anomaly Probability %"
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                  <XAxis dataKey="time" stroke="#94A3B8" fontSize={11} tickLine={false} />
+                  <YAxis stroke="#94A3B8" fontSize={11} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#FFFFFF',
+                      borderColor: '#E2E8F0',
+                      borderRadius: '8px',
+                      fontSize: '11px',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                  <Line
+                    type="monotone"
+                    dataKey={selectedChannel}
+                    stroke="#2563EB"
+                    strokeWidth={2}
+                    dot={false}
+                    name={selectedChannel.toUpperCase()}
+                    isAnimationActive={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Live Anomaly Feed Table */}
-      <Card className="bg-slate-900/60 border-slate-800">
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
+      {/* Recent Telemetry Stream Table */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
           <div>
-            <CardTitle className="text-sm font-semibold text-white">
-              Live Anomaly Event Intercepts
-            </CardTitle>
-            <p className="text-xs text-slate-400">
-              Immediate broadcasts from WebSocket when normalized anomaly score &gt; threshold
-            </p>
+            <CardTitle className="text-sm font-semibold text-slate-900">Recent Stream Telemetry</CardTitle>
+            <p className="text-xs text-slate-500">Live multi-channel frame payload</p>
           </div>
-          {anomalyAlerts.length > 0 && (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={clearAlerts}
-              className="text-xs text-slate-400 hover:text-white"
-            >
-              Clear Buffer
-            </Button>
-          )}
         </CardHeader>
         <CardContent>
-          {anomalyAlerts.length === 0 ? (
-            <div className="p-6 text-center text-slate-500 text-xs">
-              No anomalies triggered in the current streaming session.
+          {telemetryStream.length === 0 ? (
+            <div className="text-center py-8 text-xs text-slate-400">
+              No live frames received yet.
             </div>
           ) : (
-            <div className="space-y-2">
-              {anomalyAlerts.map((alert, idx) => (
-                <div
-                  key={`${alert.timestamp}-${idx}`}
-                  className="flex items-center justify-between p-3 rounded-lg bg-rose-950/20 border border-rose-900/30 text-xs"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="p-1.5 rounded bg-rose-500/20 text-rose-400">
-                      <AlertOctagon className="w-4 h-4" />
-                    </span>
-                    <div>
-                      <span className="font-semibold text-white mr-2">{alert.device_id}</span>
-                      <span className="text-slate-400 font-mono text-[11px]">
-                        {new Date(alert.timestamp).toLocaleTimeString()}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <span className="text-[11px] text-slate-400 mr-2">Score:</span>
-                      <span className="font-mono font-bold text-rose-400">
-                        {(alert.score * 100).toFixed(1)}%
-                      </span>
-                    </div>
-                    <div className="flex gap-1">
-                      {alert.affected_features.map((f) => (
-                        <span
-                          key={f}
-                          className="px-2 py-0.5 rounded bg-rose-900/40 text-rose-300 font-mono text-[10px]"
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px] font-semibold">
+                  <tr>
+                    <th className="py-2.5 px-3">Timestamp</th>
+                    <th className="py-2.5 px-3">Device ID</th>
+                    <th className="py-2.5 px-3">Temp (°C)</th>
+                    <th className="py-2.5 px-3">Humidity (%)</th>
+                    <th className="py-2.5 px-3">Pressure (kPa)</th>
+                    <th className="py-2.5 px-3">Vibration (g)</th>
+                    <th className="py-2.5 px-3">Model Score</th>
+                    <th className="py-2.5 px-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-mono">
+                  {telemetryStream.slice(0, 8).map((item, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="py-2.5 px-3 text-slate-600">
+                        {new Date(item.timestamp).toLocaleTimeString()}
+                      </td>
+                      <td className="py-2.5 px-3 font-semibold text-slate-900">{item.device_id}</td>
+                      <td className="py-2.5 px-3">{item.features.temperature.toFixed(2)}</td>
+                      <td className="py-2.5 px-3">{item.features.humidity.toFixed(2)}</td>
+                      <td className="py-2.5 px-3">{item.features.pressure.toFixed(2)}</td>
+                      <td className="py-2.5 px-3">{item.features.vibration.toFixed(2)}</td>
+                      <td className="py-2.5 px-3 text-slate-800">
+                        {(item.prediction.normalized_score * 100).toFixed(1)}%
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <Badge
+                          variant={item.prediction.is_anomaly ? 'destructive' : 'success'}
+                          className="text-[10px]"
                         >
-                          {f}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ))}
+                          {item.prediction.is_anomaly ? 'OUTLIER' : 'NORMAL'}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </CardContent>

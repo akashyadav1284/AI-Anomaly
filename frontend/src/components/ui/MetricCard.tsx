@@ -28,44 +28,59 @@ export function MetricCard({
 }: MetricCardProps) {
   if (loading) {
     return (
-      <Card className={cn('bg-slate-900/60 border-slate-800 animate-pulse', className)}>
+      <Card className={cn('bg-white border-slate-200/90 shadow-card animate-pulse', className)}>
         <CardContent className="p-5">
-          <div className="h-4 w-24 bg-slate-800 rounded mb-3" />
-          <div className="h-8 w-32 bg-slate-800 rounded mb-2" />
-          <div className="h-3 w-40 bg-slate-800 rounded" />
+          <div className="h-3 w-20 bg-slate-200 rounded mb-3" />
+          <div className="h-7 w-28 bg-slate-200 rounded mb-2" />
+          <div className="h-3 w-36 bg-slate-100 rounded" />
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <Card className={cn('bg-slate-900/60 border-slate-800 hover:border-slate-700 transition-colors', className)}>
+    <Card
+      className={cn(
+        'bg-white border-slate-200/90 hover:border-slate-300 shadow-card hover:shadow-card-hover transition-all duration-200 group',
+        className
+      )}
+    >
       <CardContent className="p-5">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium uppercase tracking-wider text-slate-400">{title}</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            {title}
+          </span>
           {Icon && (
-            <div className="p-2 rounded-lg bg-slate-800/80 text-blue-400">
+            <div className="p-2 rounded-lg bg-blue-50/80 text-blue-600 border border-blue-100/80 group-hover:bg-blue-600 group-hover:text-white transition-colors duration-200">
               <Icon className="w-4 h-4" />
             </div>
           )}
+        </div>
+
+        <div className="mt-2.5 flex items-baseline gap-2">
+          <span className="text-2xl font-bold tracking-tight text-slate-900 font-mono">
+            {value}
+          </span>
           {badge}
         </div>
-        <div className="mt-2 flex items-baseline gap-2">
-          <span className="text-2xl font-bold tracking-tight text-white font-mono">{value}</span>
-          {change && (
-            <span
-              className={cn(
-                'text-xs font-semibold px-1.5 py-0.5 rounded',
-                changePositive
-                  ? 'text-emerald-400 bg-emerald-500/10'
-                  : 'text-rose-400 bg-rose-500/10',
-              )}
-            >
-              {change}
-            </span>
-          )}
-        </div>
-        {subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}
+
+        {(subtitle || change) && (
+          <div className="mt-2 flex items-center gap-1.5 text-xs text-slate-500">
+            {change && (
+              <span
+                className={cn(
+                  'font-medium text-[11px] px-1.5 py-0.2 rounded',
+                  changePositive
+                    ? 'text-emerald-700 bg-emerald-50'
+                    : 'text-rose-700 bg-rose-50'
+                )}
+              >
+                {change}
+              </span>
+            )}
+            {subtitle && <span className="truncate text-slate-500 text-[11px]">{subtitle}</span>}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
