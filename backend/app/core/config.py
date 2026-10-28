@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     )
 
     APP_NAME: str = "AI-Based IoT Sensor Anomaly Detection API"
-    APP_VERSION: str = "0.4.0"
+    APP_VERSION: str = "0.4.1"
     APP_ENV: str = Field(default="development", description="Environment: development, staging, production")
     LOG_LEVEL: str = Field(default="INFO", description="Logging level")
 
