@@ -18,13 +18,45 @@ class MongoRepository:
         await self.db.datasets.insert_one(doc)
 
     async def get_dataset(self, dataset_id: str) -> Optional[Dict[str, Any]]:
-        return await self.db.datasets.find_one({"dataset_id": dataset_id}, {"_id": 0})
+        # Find either by dataset_id or name
+        return await self.db.datasets.find_one(
+            {"$or": [{"dataset_id": dataset_id}, {"name": dataset_id}]},
+            {"_id": 0},
+        )
 
-    async def list_datasets(self, skip: int = 0, limit: int = 50) -> Tuple[List[Dict[str, Any]], int]:
-        total = await self.db.datasets.count_documents({})
-        cursor = self.db.datasets.find({}, {"_id": 0}).sort("created_at", pymongo.DESCENDING).skip(skip).limit(limit)
+    async def list_datasets(
+        self,
+        source: Optional[str] = None,
+        search: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 50,
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        query: Dict[str, Any] = {}
+        if source and source.lower() != "all":
+            query["source"] = {"$regex": f"^{source}$", "$options": "i"}
+        if search:
+            query["$or"] = [
+                {"name": {"$regex": search, "$options": "i"}},
+                {"dataset_id": {"$regex": search, "$options": "i"}},
+                {"source": {"$regex": search, "$options": "i"}},
+                {"description": {"$regex": search, "$options": "i"}},
+            ]
+        total = await self.db.datasets.count_documents(query)
+        cursor = self.db.datasets.find(query, {"_id": 0}).sort("created_at", pymongo.DESCENDING).skip(skip).limit(limit)
         items = await cursor.to_list(length=limit)
         return items, total
+
+    async def update_dataset_quality(self, dataset_id: str, quality_summary: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        return await self.db.datasets.find_one_and_update(
+            {"$or": [{"dataset_id": dataset_id}, {"name": dataset_id}]},
+            {"$set": {"quality_summary": quality_summary, "audited_at": datetime.now(timezone.utc)}},
+            return_document=pymongo.ReturnDocument.AFTER,
+            projection={"_id": 0},
+        )
+
+    async def delete_dataset(self, dataset_id: str) -> bool:
+        res = await self.db.datasets.delete_one({"$or": [{"dataset_id": dataset_id}, {"name": dataset_id}]})
+        return res.deleted_count > 0
 
     # ==========================
     # Sensor Readings

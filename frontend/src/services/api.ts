@@ -92,21 +92,96 @@ export const apiService = {
   getReadiness: async (): Promise<ReadinessResponse> => request<ReadinessResponse>('/ready'),
 
   // Datasets
-  getDatasets: async (): Promise<DatasetItem[]> => {
+  getDatasets: async (params?: {
+    source?: string;
+    search?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<{ items: DatasetItem[]; total: number; pagination?: any }> => {
     try {
-      const res = await request<{ items?: DatasetItem[] } | DatasetItem[]>('/datasets');
-      return Array.isArray(res) ? res : res.items || [];
+      const q = new URLSearchParams();
+      if (params?.source && params.source !== 'all') q.set('source', params.source);
+      if (params?.search) q.set('search', params.search);
+      if (params?.page) q.set('page', String(params.page));
+      if (params?.page_size) q.set('page_size', String(params.page_size));
+
+      const qs = q.toString() ? `?${q.toString()}` : '';
+      const res = await request<any>(`/datasets${qs}`);
+      const items = Array.isArray(res) ? res : res.items || [];
+      const total = res.pagination?.total_count ?? items.length;
+      return { items, total, pagination: res.pagination };
     } catch {
-      return [];
+      return { items: [], total: 0 };
     }
   },
 
-  getDatasetDetails: async (name: string): Promise<DatasetDetailResponse> => {
-    return request<DatasetDetailResponse>(`/datasets/${name}`);
+  getDatasetDetails: async (datasetId: string): Promise<DatasetDetailResponse> => {
+    return request<DatasetDetailResponse>(`/datasets/${datasetId}`);
   },
 
-  getDatasetAudit: async (name: string): Promise<QualityAuditResponse> => {
-    return request<QualityAuditResponse>(`/datasets/${name}/audit`);
+  getDatasetPreview: async (
+    datasetId: string,
+    limit: number = 25,
+  ): Promise<{ dataset_id: string; total_rows: number; columns: string[]; preview: Record<string, any>[] }> => {
+    return request<{ dataset_id: string; total_rows: number; columns: string[]; preview: Record<string, any>[] }>(
+      `/datasets/${datasetId}/preview?limit=${limit}`,
+    );
+  },
+
+  getDatasetAudit: async (datasetId: string): Promise<QualityAuditResponse> => {
+    return request<QualityAuditResponse>(`/datasets/${datasetId}/audit`);
+  },
+
+  generateSyntheticDataset: async (payload: {
+    dataset_name: string;
+    description?: string;
+    device_count: number;
+    samples_per_device: number;
+    sampling_freq: string;
+    inject_anomalies: boolean;
+    anomaly_rate: number;
+    random_seed: number;
+  }): Promise<DatasetItem> => {
+    return request<DatasetItem>('/datasets/generate-synthetic', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  uploadDatasetFile: async (formData: FormData): Promise<DatasetItem> => {
+    const url = `${API_BASE_URL}/datasets/upload`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'X-API-Key': API_KEY,
+      },
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.message || 'File upload failed');
+    }
+    return (await res.json()) as DatasetItem;
+  },
+
+  preprocessDataset: async (payload: {
+    dataset_id: string;
+    handle_missing: string;
+    drop_duplicates: boolean;
+    normalize_features: boolean;
+    train_split_ratio: number;
+    val_split_ratio: number;
+  }): Promise<any> => {
+    return request<any>('/datasets/preprocess', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteDataset: async (datasetId: string): Promise<{ status: string }> => {
+    return request<{ status: string }>(`/datasets/${datasetId}`, {
+      method: 'DELETE',
+    });
   },
 
   // Sensors

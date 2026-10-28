@@ -34,6 +34,26 @@ class DatasetImportRequest(BaseModel):
     parameters: Dict[str, Any] = Field(default_factory=dict)
 
 
+class SyntheticDatasetGenerateRequest(BaseModel):
+    dataset_name: str = "Synthetic_IoT_Lab"
+    description: Optional[str] = "Physics-based multivariate industrial telemetry"
+    device_count: int = Field(default=2, ge=1, le=10)
+    samples_per_device: int = Field(default=1000, ge=100, le=10000)
+    sampling_freq: str = "1min"
+    inject_anomalies: bool = True
+    anomaly_rate: float = Field(default=0.03, ge=0.0, le=0.5)
+    random_seed: int = 42
+
+
+class DatasetPreprocessingRequest(BaseModel):
+    dataset_id: str
+    handle_missing: str = Field(default="forward_fill", description="'drop', 'forward_fill', 'mean'")
+    drop_duplicates: bool = True
+    normalize_features: bool = False
+    train_split_ratio: float = Field(default=0.7, ge=0.5, le=0.9)
+    val_split_ratio: float = Field(default=0.15, ge=0.05, le=0.3)
+
+
 class DatasetResponse(BaseModel):
     dataset_id: str
     name: str
@@ -47,7 +67,9 @@ class DatasetResponse(BaseModel):
     timestamp_end: Optional[str] = None
     label_availability: bool = False
     created_at: datetime
+    audited_at: Optional[datetime] = None
     quality_summary: Optional[Dict[str, Any]] = None
+    storage_path: Optional[str] = None
 
 
 # ==========================================

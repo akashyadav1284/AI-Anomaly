@@ -38,13 +38,19 @@ export interface DatasetItem {
   dataset_id: string;
   name: string;
   description?: string;
-  source_type: string;
-  sample_count: number;
+  source: string;
+  source_type?: string;
+  row_count: number;
+  column_count: number;
   feature_names: string[];
-  has_ground_truth: boolean;
-  anomaly_ratio?: number;
-  sampling_rate_hz?: number;
+  devices: string[];
+  timestamp_start?: string;
+  timestamp_end?: string;
+  label_availability: boolean;
   created_at: string;
+  audited_at?: string;
+  quality_summary?: Record<string, any>;
+  storage_path?: string;
 }
 
 export interface DatasetDetailResponse extends DatasetItem {
@@ -58,20 +64,37 @@ export interface DatasetDetailResponse extends DatasetItem {
 }
 
 export interface QualityAuditIssue {
-  check: string;
-  severity: 'low' | 'medium' | 'high';
-  detail: string;
+  check?: string;
+  check_name?: string;
+  severity: 'low' | 'medium' | 'high' | 'LOW' | 'MEDIUM' | 'HIGH' | 'ERROR' | 'WARNING';
+  detail?: string;
+  message?: string;
+  column?: string;
+  affected_count?: number;
 }
 
 export interface QualityAuditResponse {
-  dataset_name: string;
-  passed: boolean;
-  total_samples: number;
-  missing_values_count: number;
-  duplicate_timestamps: number;
-  infinite_values_count: number;
-  issues: QualityAuditIssue[];
-  audited_at: string;
+  dataset_name?: string;
+  is_valid?: boolean;
+  passed?: boolean;
+  row_count?: number;
+  total_samples?: number;
+  missing_values_by_column?: Record<string, number>;
+  missing_values_count?: number;
+  duplicate_rows_count?: number;
+  duplicate_timestamps?: number;
+  infinite_values_count?: number;
+  anomaly_summary?: {
+    has_ground_truth: boolean;
+    total_anomalies: number;
+    anomaly_ratio: number;
+    breakdown_by_type: Record<string, number>;
+  };
+  errors?: QualityAuditIssue[];
+  warnings?: QualityAuditIssue[];
+  issues?: QualityAuditIssue[];
+  audited_at?: string;
+  generated_at?: string;
 }
 
 export interface SensorDevice {
