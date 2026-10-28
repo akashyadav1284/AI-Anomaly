@@ -126,7 +126,13 @@ class AnomalyResponse(BaseModel):
 
 
 class AnomalyStatusUpdate(BaseModel):
-    review_status: str = Field(..., description="'pending', 'acknowledged', 'resolved', 'false_positive'")
+    review_status: str = Field(..., description="'pending', 'under_review', 'confirmed', 'acknowledged', 'resolved', 'false_positive'")
+    notes: Optional[str] = None
+
+
+class AnomalyBulkUpdate(BaseModel):
+    anomaly_ids: List[str]
+    review_status: str = Field(..., description="'pending', 'under_review', 'confirmed', 'acknowledged', 'resolved', 'false_positive'")
     notes: Optional[str] = None
 
 

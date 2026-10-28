@@ -152,17 +152,44 @@ export const apiService = {
     device_id?: string;
     severity?: string;
     status?: string;
+    review_status?: string;
+    search?: string;
+    sort_by?: string;
+    order?: string;
+    page?: number;
+    page_size?: number;
     limit?: number;
-  }): Promise<{ items: AnomalyRecord[]; total: number }> => {
+  }): Promise<{ items: AnomalyRecord[]; total: number; pagination?: { total_count: number; total_pages: number } }> => {
     const q = new URLSearchParams();
-    if (params?.device_id) q.set('device_id', params.device_id);
-    if (params?.severity) q.set('severity', params.severity);
-    if (params?.status) q.set('status', params.status);
-    if (params?.limit) q.set('limit', String(params.limit));
+    if (params?.device_id && params.device_id !== 'all') q.set('device_id', params.device_id);
+    if (params?.severity && params.severity !== 'all') q.set('severity', params.severity);
+    
+    const effectiveStatus = params?.review_status || params?.status;
+    if (effectiveStatus && effectiveStatus !== 'all') {
+      q.set('review_status', effectiveStatus);
+      q.set('status', effectiveStatus);
+    }
+    
+    if (params?.search) q.set('search', params.search);
+    if (params?.sort_by) q.set('sort_by', params.sort_by);
+    if (params?.order) q.set('order', params.order);
+    if (params?.page) q.set('page', String(params.page));
+    
+    const pageSize = params?.page_size || params?.limit || 50;
+    q.set('page_size', String(pageSize));
+    q.set('limit', String(pageSize));
 
     const qs = q.toString() ? `?${q.toString()}` : '';
     try {
-      return await request<{ items: AnomalyRecord[]; total: number }>(`/anomalies${qs}`);
+      const res = await request<{
+        items: AnomalyRecord[];
+        pagination?: { page: number; page_size: number; total_count: number; total_pages: number };
+        total?: number;
+      }>(`/anomalies${qs}`);
+      
+      const items = res.items || [];
+      const total = res.pagination?.total_count ?? (typeof res.total === 'number' ? res.total : items.length);
+      return { items, total, pagination: res.pagination };
     } catch {
       return { items: [], total: 0 };
     }
@@ -176,6 +203,17 @@ export const apiService = {
     return request<AnomalyRecord>(`/anomalies/${anomalyId}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ review_status: reviewStatus, notes }),
+    });
+  },
+
+  bulkUpdateAnomalyStatus: async (
+    anomalyIds: string[],
+    reviewStatus: string,
+    notes?: string,
+  ): Promise<{ status: string; updated_count: number }> => {
+    return request<{ status: string; updated_count: number }>('/anomalies/bulk-status', {
+      method: 'PATCH',
+      body: JSON.stringify({ anomaly_ids: anomalyIds, review_status: reviewStatus, notes }),
     });
   },
 

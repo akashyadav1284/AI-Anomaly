@@ -124,13 +124,15 @@ export interface AnomalyRecord {
   raw_score?: number;
   normalized_score: number;
   threshold: number;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  review_status: 'pending' | 'under_review' | 'confirmed' | 'false_positive';
+  severity: 'low' | 'medium' | 'high' | 'critical' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  review_status: 'pending' | 'under_review' | 'confirmed' | 'false_positive' | 'resolved' | 'acknowledged';
   affected_features: string[];
   explanation?: string | PredictionExplanation;
   created_at: string;
+  acknowledged_at?: string;
   resolved_at?: string;
   notes?: string;
+  investigator?: string;
 }
 
 export interface ModelMetrics {

@@ -87,31 +87,43 @@ class MongoRepository:
         device_id: Optional[str] = None,
         severity: Optional[str] = None,
         review_status: Optional[str] = None,
+        search: Optional[str] = None,
+        sort_by: str = "timestamp",
+        order: str = "desc",
         skip: int = 0,
         limit: int = 50,
     ) -> Tuple[List[Dict[str, Any]], int]:
         query: Dict[str, Any] = {}
-        if device_id:
+        if device_id and device_id.lower() != "all":
             query["device_id"] = device_id
-        if severity:
-            query["severity"] = severity
-        if review_status:
-            query["review_status"] = review_status
+        if severity and severity.lower() != "all":
+            query["severity"] = {"$regex": f"^{severity}$", "$options": "i"}
+        if review_status and review_status.lower() != "all":
+            query["review_status"] = {"$regex": f"^{review_status}$", "$options": "i"}
+        if search:
+            query["$or"] = [
+                {"anomaly_id": {"$regex": search, "$options": "i"}},
+                {"device_id": {"$regex": search, "$options": "i"}},
+                {"model_name": {"$regex": search, "$options": "i"}},
+            ]
+
+        direction = pymongo.DESCENDING if order.lower() == "desc" else pymongo.ASCENDING
+        sort_field = sort_by if sort_by in ["timestamp", "normalized_score", "raw_score", "severity"] else "timestamp"
 
         total = await self.db.anomalies.count_documents(query)
-        cursor = self.db.anomalies.find(query, {"_id": 0}).sort("timestamp", pymongo.DESCENDING).skip(skip).limit(limit)
+        cursor = self.db.anomalies.find(query, {"_id": 0}).sort(sort_field, direction).skip(skip).limit(limit)
         items = await cursor.to_list(length=limit)
         return items, total
 
     async def update_anomaly_status(self, anomaly_id: str, status: str, notes: Optional[str] = None) -> Optional[Dict[str, Any]]:
         update_doc: Dict[str, Any] = {"review_status": status}
         now = datetime.now(timezone.utc)
-        if status == "acknowledged":
+        if status in ["acknowledged", "under_review"]:
             update_doc["acknowledged_at"] = now
-        elif status in ["resolved", "false_positive"]:
+        elif status in ["resolved", "false_positive", "confirmed"]:
             update_doc["resolved_at"] = now
 
-        if notes:
+        if notes is not None:
             update_doc["notes"] = notes
 
         res = await self.db.anomalies.find_one_and_update(
@@ -121,6 +133,28 @@ class MongoRepository:
             projection={"_id": 0},
         )
         return res
+
+    async def update_anomalies_bulk(
+        self,
+        anomaly_ids: List[str],
+        status: str,
+        notes: Optional[str] = None,
+    ) -> int:
+        update_doc: Dict[str, Any] = {"review_status": status}
+        now = datetime.now(timezone.utc)
+        if status in ["acknowledged", "under_review"]:
+            update_doc["acknowledged_at"] = now
+        elif status in ["resolved", "false_positive", "confirmed"]:
+            update_doc["resolved_at"] = now
+
+        if notes is not None:
+            update_doc["notes"] = notes
+
+        result = await self.db.anomalies.update_many(
+            {"anomaly_id": {"$in": anomaly_ids}},
+            {"$set": update_doc},
+        )
+        return result.modified_count
 
     # ==========================
     # Models & Jobs

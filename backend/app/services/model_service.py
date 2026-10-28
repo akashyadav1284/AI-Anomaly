@@ -97,6 +97,16 @@ class ModelRegistryService:
             is_anomaly=is_anomaly,
         )
 
+        # Dynamic severity calibration
+        if norm_score >= 0.90:
+            severity = "CRITICAL"
+        elif norm_score >= 0.78:
+            severity = "HIGH"
+        elif norm_score >= 0.60:
+            severity = "MEDIUM"
+        else:
+            severity = "LOW" if is_anomaly else "NORMAL"
+
         return {
             "model_name": model_name,
             "model_version": metadata.get("model_version", "0.1.0"),
@@ -106,5 +116,5 @@ class ModelRegistryService:
             "is_anomaly": is_anomaly,
             "explanation": explanation.summary,
             "top_contributing_features": explanation.top_contributing_features,
-            "severity": "CRITICAL" if norm_score > 0.9 else ("HIGH" if is_anomaly else "NORMAL"),
+            "severity": severity,
         }

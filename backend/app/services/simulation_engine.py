@@ -320,7 +320,7 @@ class SimulationEngine:
                                     "raw_score": inf_result.get("raw_score", 0.0),
                                     "normalized_score": inf_result["normalized_score"],
                                     "threshold": inf_result["decision_threshold"],
-                                    "severity": inf_result.get("severity", "high"),
+                                    "severity": inf_result.get("severity", "HIGH"),
                                     "review_status": "pending",
                                     "affected_features": [f["feature"] for f in inf_result["top_contributing_features"]],
                                     "explanation": inf_result.get("explanation", ""),
