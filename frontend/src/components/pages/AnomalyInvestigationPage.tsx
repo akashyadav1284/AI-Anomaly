@@ -34,6 +34,8 @@ export function AnomalyInvestigationPage() {
 
   useEffect(() => {
     fetchAnomalies();
+    const interval = setInterval(fetchAnomalies, 4000);
+    return () => clearInterval(interval);
   }, [severityFilter, statusFilter]);
 
   const handleUpdateStatus = async (newStatus: 'under_review' | 'confirmed' | 'false_positive') => {
