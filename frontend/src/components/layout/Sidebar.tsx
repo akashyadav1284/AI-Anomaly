@@ -15,6 +15,7 @@ import {
   Wifi,
   WifiOff,
   Server,
+  LogOut,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { BrandLogo } from '../brand/BrandLogo';
@@ -38,6 +39,8 @@ interface SidebarProps {
   activeSimulatorStatus?: string;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  onLogout?: () => void;
+  userName?: string;
 }
 
 interface NavItem {
@@ -90,6 +93,8 @@ export function Sidebar({
   activeSimulatorStatus = 'stopped',
   isCollapsed = false,
   onToggleCollapse,
+  onLogout,
+  userName = 'Operator',
 }: SidebarProps) {
   return (
     <aside
@@ -150,7 +155,6 @@ export function Sidebar({
                     isCollapsed && 'justify-center px-2'
                   )}
                 >
-                  {/* Left Active Indicator Rail */}
                   {isActive && (
                     <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-blue-600" />
                   )}
@@ -179,42 +183,65 @@ export function Sidebar({
         ))}
       </nav>
 
-      {/* Connectivity & Operational Telemetry Pill */}
-      <div className="p-3 border-t border-slate-200/80 bg-slate-50/60">
+      {/* User Session & Connectivity Footer */}
+      <div className="p-3 border-t border-slate-200/80 bg-slate-50/60 space-y-2">
         {!isCollapsed ? (
-          <div className="space-y-2 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-slate-500 flex items-center gap-1.5">
-                <Server className="w-3.5 h-3.5 text-slate-400" />
-                Backend Node
-              </span>
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Active
-              </span>
+          <>
+            {/* Authenticated User Pill */}
+            <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200/80 text-xs">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-[11px] shrink-0">
+                  {userName.charAt(0).toUpperCase()}
+                </div>
+                <span className="font-mono text-slate-800 font-semibold truncate text-[11px]">
+                  {userName}
+                </span>
+              </div>
+              {onLogout && (
+                <button
+                  onClick={onLogout}
+                  className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                  title="Sign out of console"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-slate-500 flex items-center gap-1.5">
-                {isWsConnected ? (
-                  <Wifi className="w-3.5 h-3.5 text-emerald-500" />
-                ) : (
-                  <WifiOff className="w-3.5 h-3.5 text-slate-400" />
-                )}
-                Telemetry WS
-              </span>
-              <span
-                className={cn(
-                  'text-[11px] font-medium font-mono',
-                  isWsConnected ? 'text-emerald-600' : 'text-slate-400'
-                )}
-              >
-                {isWsConnected ? 'STREAMING' : 'IDLE'}
-              </span>
+            <div className="space-y-1.5 text-xs pt-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                  <Server className="w-3.5 h-3.5 text-slate-400" />
+                  Backend Node
+                </span>
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Active
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                  {isWsConnected ? (
+                    <Wifi className="w-3.5 h-3.5 text-emerald-500" />
+                  ) : (
+                    <WifiOff className="w-3.5 h-3.5 text-slate-400" />
+                  )}
+                  Telemetry WS
+                </span>
+                <span
+                  className={cn(
+                    'text-[11px] font-medium font-mono',
+                    isWsConnected ? 'text-emerald-600' : 'text-slate-400'
+                  )}
+                >
+                  {isWsConnected ? 'STREAMING' : 'IDLE'}
+                </span>
+              </div>
             </div>
-          </div>
+          </>
         ) : (
-          <div className="flex flex-col items-center gap-2">
+          <div className="flex flex-col items-center gap-2.5">
             <span
               title={`WebSocket: ${isWsConnected ? 'Connected' : 'Disconnected'}`}
               className={cn(
@@ -222,6 +249,15 @@ export function Sidebar({
                 isWsConnected ? 'bg-emerald-500' : 'bg-slate-300'
               )}
             />
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="p-1.5 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                title="Sign out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         )}
       </div>

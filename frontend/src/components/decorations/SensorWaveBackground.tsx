@@ -116,3 +116,4 @@ export function SensorWaveBackground({ className = '', opacity = 0.45 }: { class
     </div>
   );
 }
+

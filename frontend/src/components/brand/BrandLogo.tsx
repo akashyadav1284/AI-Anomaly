@@ -62,3 +62,4 @@ export function BrandLogo({ className = '', size = 28, pulse = true }: { classNa
     </div>
   );
 }
+

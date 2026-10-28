@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Sidebar, NavTab } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { SensorWaveBackground } from './components/decorations/SensorWaveBackground';
+import { LoginPage } from './components/LoginPage';
 import { OverviewPage } from './components/pages/OverviewPage';
 import { LiveMonitoringPage } from './components/pages/LiveMonitoringPage';
 import { SensorExplorerPage } from './components/pages/SensorExplorerPage';
@@ -14,8 +15,10 @@ import { ExperimentComparisonPage } from './components/pages/ExperimentCompariso
 import { ReportsPage } from './components/pages/ReportsPage';
 import { useSimulatorWebSocket } from './services/useWebSocket';
 import { apiService } from './services/api';
+import { useAuth, UserSession } from './services/auth';
 
 export function App() {
+  const { isAuthenticated, user, login, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<NavTab>('overview');
   const [simulatorStatus, setSimulatorStatus] = useState<string>('stopped');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -25,6 +28,7 @@ export function App() {
   const { isConnected } = useSimulatorWebSocket();
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     const checkSimulator = async () => {
       try {
         const s = await apiService.getSimulatorStatus();
@@ -36,13 +40,22 @@ export function App() {
     checkSimulator();
     const interval = setInterval(checkSimulator, 4000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isAuthenticated]);
 
   const handleGlobalRefresh = () => {
     setIsRefreshing(true);
     setRefreshTrigger((prev) => prev + 1);
     setTimeout(() => setIsRefreshing(false), 800);
   };
+
+  const handleLoginSuccess = (session: UserSession) => {
+    login(session);
+  };
+
+  // If not authenticated, render the interactive Login Experience
+  if (!isAuthenticated) {
+    return <LoginPage onSuccess={handleLoginSuccess} />;
+  }
 
   const renderActivePage = () => {
     switch (activeTab) {
@@ -84,6 +97,8 @@ export function App() {
         activeSimulatorStatus={simulatorStatus}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+        onLogout={logout}
+        userName={user?.userId}
       />
 
       {/* Main Technical Viewport Area */}
@@ -95,6 +110,8 @@ export function App() {
           simulatorStatus={simulatorStatus}
           onRefresh={handleGlobalRefresh}
           isRefreshing={isRefreshing}
+          onLogout={logout}
+          userName={user?.userId}
         />
 
         {/* Dynamic Page Container */}
