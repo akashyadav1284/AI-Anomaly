@@ -13,3 +13,4 @@ joblib>=1.4.0
 pyjwt>=2.9.0
 passlib[bcrypt]>=1.7.4
 pyarrow>=15.0.0
+python-multipart>=0.0.12
