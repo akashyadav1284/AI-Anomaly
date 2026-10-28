@@ -66,6 +66,7 @@ artifacts/checkpoints/*
 *.pth
 *.pkl
 *.joblib
+!artifacts/models/isolation_forest/*.joblib
 *.parquet
 *.feather
 

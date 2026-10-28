@@ -77,3 +77,4 @@ export function BigBrandLogo({ size = 96, className = '' }: { size?: number; cla
     </div>
   );
 }
+
