@@ -63,6 +63,13 @@ async def list_anomalies(
     )
 
 
+@router.get("/summary/kpi")
+async def get_anomalies_kpi(db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Retrieve collection-wide live KPI metrics for dashboard filter cards."""
+    repo = MongoRepository(db)
+    return await repo.get_anomaly_kpi_summary()
+
+
 @router.patch("/bulk-status")
 async def bulk_update_anomalies(
     payload: AnomalyBulkUpdate,

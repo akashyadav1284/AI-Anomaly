@@ -72,9 +72,37 @@ export function AnomalyInvestigationPage() {
   };
 
   // Fetch anomalies from backend with real filters & pagination
+  const [serverKpis, setServerKpis] = useState<{
+    total: number;
+    pending: number;
+    under_review: number;
+    confirmed: number;
+    false_positive: number;
+    resolved: number;
+    critical: number;
+  }>({
+    total: 0,
+    pending: 0,
+    under_review: 0,
+    confirmed: 0,
+    false_positive: 0,
+    resolved: 0,
+    critical: 0,
+  });
+
+  const fetchKpis = async () => {
+    try {
+      const k = await apiService.getAnomalyKpis();
+      setServerKpis(k);
+    } catch {
+      // fallback
+    }
+  };
+
   const fetchAnomalies = async () => {
     setLoading(true);
     try {
+      fetchKpis();
       const res = await apiService.getAnomalies({
         device_id: deviceFilter === 'all' ? undefined : deviceFilter,
         severity: severityFilter === 'all' ? undefined : severityFilter,
@@ -152,6 +180,10 @@ export function AnomalyInvestigationPage() {
 
   // Calculate live counts across the active batch for the KPI summary cards
   const kpiStats = useMemo(() => {
+    if (serverKpis && serverKpis.total > 0) {
+      return serverKpis;
+    }
+
     let pending = 0;
     let underReview = 0;
     let confirmed = 0;
@@ -174,13 +206,13 @@ export function AnomalyInvestigationPage() {
     return {
       total: totalCount || anomalies.length,
       pending,
-      underReview,
+      under_review: underReview,
       confirmed,
-      falsePositive,
+      false_positive: falsePositive,
       resolved,
       critical,
     };
-  }, [anomalies, totalCount]);
+  }, [anomalies, totalCount, serverKpis]);
 
   // Status progression action
   const handleUpdateStatus = async (
@@ -253,13 +285,24 @@ export function AnomalyInvestigationPage() {
   ) => {
     if (selectedIds.length === 0) return;
     setUpdatingStatus(true);
+    
+    // Optimistically update status in memory
+    const idsSet = new Set(selectedIds);
+    setAnomalies((prev) =>
+      prev.map((a) => (idsSet.has(a.anomaly_id) ? { ...a, review_status: newStatus } : a)),
+    );
+    if (selectedAnomaly && idsSet.has(selectedAnomaly.anomaly_id)) {
+      setSelectedAnomaly((prev) => (prev ? { ...prev, review_status: newStatus } : null));
+    }
+
     try {
-      await apiService.bulkUpdateAnomalyStatus(selectedIds, newStatus);
-      showToast(`Bulk updated ${selectedIds.length} incident(s) to ${newStatus.replace('_', ' ')}`);
+      const res = await apiService.bulkUpdateAnomalyStatus(selectedIds, newStatus);
+      showToast(`Bulk updated ${res.updated_count || selectedIds.length} incident(s) to ${newStatus.replace('_', ' ')}`);
       setSelectedIds([]);
-      fetchAnomalies();
+      await fetchAnomalies();
     } catch {
-      showToast('Failed to perform bulk update');
+      showToast('Failed to perform bulk update on server');
+      fetchAnomalies();
     } finally {
       setUpdatingStatus(false);
     }
@@ -489,7 +532,7 @@ export function AnomalyInvestigationPage() {
             <span className="text-[11px] font-semibold uppercase tracking-wider">Under Review</span>
             <AlertTriangle className="w-4 h-4" />
           </div>
-          <div className="text-2xl font-bold text-blue-700 font-mono">{kpiStats.underReview}</div>
+          <div className="text-2xl font-bold text-blue-700 font-mono">{kpiStats.under_review}</div>
           <span className="text-[10px] text-slate-400 mt-0.5 block">Investigating</span>
         </div>
 

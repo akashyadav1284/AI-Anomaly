@@ -223,6 +223,38 @@ export const apiService = {
   },
 
   // Anomalies
+  getAnomalyKpis: async (): Promise<{
+    total: number;
+    pending: number;
+    under_review: number;
+    confirmed: number;
+    false_positive: number;
+    resolved: number;
+    critical: number;
+  }> => {
+    try {
+      return await request<{
+        total: number;
+        pending: number;
+        under_review: number;
+        confirmed: number;
+        false_positive: number;
+        resolved: number;
+        critical: number;
+      }>('/anomalies/summary/kpi');
+    } catch {
+      return {
+        total: 0,
+        pending: 0,
+        under_review: 0,
+        confirmed: 0,
+        false_positive: 0,
+        resolved: 0,
+        critical: 0,
+      };
+    }
+  },
+
   getAnomalies: async (params?: {
     device_id?: string;
     severity?: string;

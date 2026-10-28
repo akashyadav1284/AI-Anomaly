@@ -147,6 +147,37 @@ class MongoRepository:
         items = await cursor.to_list(length=limit)
         return items, total
 
+    async def get_anomaly_kpi_summary(self) -> Dict[str, int]:
+        """Aggregate total count, by-status counts, and critical severity count across entire collection."""
+        pipeline = [
+            {
+                "$group": {
+                    "_id": "$review_status",
+                    "count": {"$sum": 1},
+                }
+            }
+        ]
+        status_groups = await self.db.anomalies.aggregate(pipeline).to_list(length=20)
+        status_map: Dict[str, int] = {}
+        total = 0
+        for grp in status_groups:
+            k = str(grp.get("_id", "")).lower()
+            c = int(grp.get("count", 0))
+            status_map[k] = c
+            total += c
+
+        critical_count = await self.db.anomalies.count_documents({"severity": {"$regex": "^critical$", "$options": "i"}})
+
+        return {
+            "total": total,
+            "pending": status_map.get("pending", 0) + status_map.get("new", 0),
+            "under_review": status_map.get("under_review", 0),
+            "confirmed": status_map.get("confirmed", 0),
+            "false_positive": status_map.get("false_positive", 0),
+            "resolved": status_map.get("resolved", 0) + status_map.get("acknowledged", 0),
+            "critical": critical_count,
+        }
+
     async def update_anomaly_status(self, anomaly_id: str, status: str, notes: Optional[str] = None) -> Optional[Dict[str, Any]]:
         update_doc: Dict[str, Any] = {"review_status": status}
         now = datetime.now(timezone.utc)
