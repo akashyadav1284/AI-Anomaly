@@ -38,8 +38,19 @@ export function App() {
       }
     };
     checkSimulator();
-    const interval = setInterval(checkSimulator, 4000);
-    return () => clearInterval(interval);
+    const interval = setInterval(checkSimulator, 10000);
+
+    // Warm-up ping to keep Render backend container hot and awake
+    const keepWarm = () => {
+      apiService.getHealth().catch(() => {});
+    };
+    keepWarm();
+    const warmInterval = setInterval(keepWarm, 25000);
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(warmInterval);
+    };
   }, [isAuthenticated]);
 
   const handleGlobalRefresh = () => {

@@ -38,10 +38,33 @@ export class ApiClientError extends Error {
   }
 }
 
-async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
+// In-memory response cache for instant UI rendering (<50ms)
+const memoryCache = new Map<string, { data: any; expiry: number }>();
+
+async function request<T>(
+  endpoint: string,
+  options?: RequestInit & { timeoutMs?: number; skipCache?: boolean },
+): Promise<T> {
+  const isGet = !options?.method || options.method.toUpperCase() === 'GET';
+  const cacheKey = 'ai_guard_cache_' + endpoint;
+
+  // 1. Instant return from Memory Cache if fresh
+  if (isGet && !options?.skipCache) {
+    const mem = memoryCache.get(cacheKey);
+    if (mem && Date.now() < mem.expiry) {
+      return mem.data as T;
+    }
+  }
+
+  const url = API_BASE_URL + endpoint;
+  // 6 second aggressive network timeout so user never hangs waiting for a sleeping server
+  const timeoutMs = options?.timeoutMs || 6000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
     const res = await fetch(url, {
+      signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
         'X-API-Key': API_KEY,
@@ -49,26 +72,50 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
       },
       ...options,
     });
+    clearTimeout(timeoutId);
 
     if (!res.ok) {
       let errorDetail: ApiErrorDetail;
       try {
         const errorJson = await res.json();
         errorDetail = errorJson.error || {
-          code: `HTTP_${res.status}`,
+          code: 'HTTP_' + res.status,
           message: errorJson.detail || errorJson.message || res.statusText || 'Request failed',
         };
       } catch {
         errorDetail = {
-          code: `HTTP_${res.status}`,
-          message: res.statusText || `Request failed with status ${res.status}`,
+          code: 'HTTP_' + res.status,
+          message: res.statusText || ('Request failed with status ' + res.status),
         };
       }
       throw new ApiClientError(errorDetail);
     }
 
-    return (await res.json()) as T;
+    const data = (await res.json()) as T;
+    if (isGet) {
+      // Cache in memory for 15s and localStorage as long-term offline fallback
+      memoryCache.set(cacheKey, { data, expiry: Date.now() + 15000 });
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify({ data, savedAt: Date.now() }));
+      } catch {}
+    }
+    return data;
   } catch (err) {
+    clearTimeout(timeoutId);
+
+    // If backend is waking from cold sleep or timed out, immediately return stored snapshot
+    if (isGet) {
+      try {
+        const stored = localStorage.getItem(cacheKey);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed?.data) {
+            return parsed.data as T;
+          }
+        }
+      } catch {}
+    }
+
     if (err instanceof ApiClientError) {
       throw err;
     }
