@@ -7,6 +7,7 @@ interface HeaderProps {
   activeTab: NavTab;
   isWsConnected?: boolean;
   simulatorStatus?: string;
+  backendReadiness?: 'ready' | 'waking_up' | 'connecting' | 'unavailable';
   onRefresh?: () => void;
   isRefreshing?: boolean;
   onLogout?: () => void;
@@ -30,6 +31,7 @@ export function Header({
   activeTab,
   isWsConnected = false,
   simulatorStatus = 'stopped',
+  backendReadiness = 'connecting',
   onRefresh,
   isRefreshing = false,
   onLogout,
@@ -63,6 +65,41 @@ export function Header({
           />
           <span className="text-[11px] font-mono tracking-wide uppercase font-medium">
             Sim: {simulatorStatus}
+          </span>
+        </div>
+
+        {/* Service Readiness Status Indicator */}
+        <div
+          title={
+            backendReadiness === 'ready'
+              ? 'Cloud cluster and database ready'
+              : backendReadiness === 'waking_up'
+              ? 'Waking up free-tier backend and database...'
+              : backendReadiness === 'unavailable'
+              ? 'Services temporarily unavailable. Retry in a moment.'
+              : 'Verifying service connection...'
+          }
+          className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono border bg-slate-50 border-slate-200"
+        >
+          <span
+            className={`w-2 h-2 rounded-full ${
+              backendReadiness === 'ready'
+                ? 'bg-emerald-500'
+                : backendReadiness === 'waking_up'
+                ? 'bg-amber-500 animate-pulse'
+                : backendReadiness === 'unavailable'
+                ? 'bg-rose-500'
+                : 'bg-blue-500 animate-ping'
+            }`}
+          />
+          <span className="text-slate-700 font-medium capitalize">
+            {backendReadiness === 'ready'
+              ? 'Services: Ready'
+              : backendReadiness === 'waking_up'
+              ? 'Services: Waking Up'
+              : backendReadiness === 'unavailable'
+              ? 'Services: Unavailable'
+              : 'Services: Connecting'}
           </span>
         </div>
 

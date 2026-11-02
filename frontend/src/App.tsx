@@ -13,18 +13,29 @@ import { SimulationControlCenterPage } from './components/pages/SimulationContro
 import { ModelResearchLabPage } from './components/pages/ModelResearchLabPage';
 import { ExperimentComparisonPage } from './components/pages/ExperimentComparisonPage';
 import { ReportsPage } from './components/pages/ReportsPage';
+import { BroadcastModal, ReadinessState } from './components/BroadcastModal';
 import { useSimulatorWebSocket } from './services/useWebSocket';
 import { apiService } from './services/api';
-import { useAuth, UserSession } from './services/auth';
+import { useAuth, UserSession, BROADCAST_DISMISSED_KEY } from './services/auth';
 
 export function App() {
   const { isAuthenticated, user, login, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<NavTab>('overview');
   const [simulatorStatus, setSimulatorStatus] = useState<string>('stopped');
   const [isBackendOnline, setIsBackendOnline] = useState<boolean>(false);
+  const [backendReadiness, setBackendReadiness] = useState<ReadinessState>('connecting');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // Post-login Broadcast Announcement Modal State (session-persisted)
+  const [showBroadcastModal, setShowBroadcastModal] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem(BROADCAST_DISMISSED_KEY) !== 'true';
+    } catch {
+      return true;
+    }
+  });
 
   const { isConnected } = useSimulatorWebSocket();
 
@@ -33,11 +44,24 @@ export function App() {
 
     const checkSystemHealth = async () => {
       try {
-        const [h, s] = await Promise.all([
+        const [h, r, s] = await Promise.all([
           apiService.getHealth().catch(() => null),
+          apiService.getReadiness().catch(() => null),
           apiService.getSimulatorStatus().catch(() => null),
         ]);
-        setIsBackendOnline(h !== null && h.status === 'ok');
+
+        const isBackendUp = h !== null && h.status === 'ok';
+        const isDbUp = r?.components?.database?.ready === true;
+
+        setIsBackendOnline(isBackendUp);
+        if (isBackendUp && isDbUp) {
+          setBackendReadiness('ready');
+        } else if (isBackendUp && !isDbUp) {
+          setBackendReadiness('waking_up');
+        } else {
+          setBackendReadiness('connecting');
+        }
+
         if (s) {
           setSimulatorStatus(s.status);
         } else {
@@ -45,6 +69,7 @@ export function App() {
         }
       } catch {
         setIsBackendOnline(false);
+        setBackendReadiness('unavailable');
         setSimulatorStatus('stopped');
       }
     };
@@ -62,7 +87,18 @@ export function App() {
   };
 
   const handleLoginSuccess = (session: UserSession) => {
+    try {
+      sessionStorage.removeItem(BROADCAST_DISMISSED_KEY);
+    } catch {}
+    setShowBroadcastModal(true);
     login(session);
+  };
+
+  const handleDismissBroadcast = () => {
+    try {
+      sessionStorage.setItem(BROADCAST_DISMISSED_KEY, 'true');
+    } catch {}
+    setShowBroadcastModal(false);
   };
 
   // If not authenticated, render the interactive Login Experience
@@ -122,6 +158,7 @@ export function App() {
           activeTab={activeTab}
           isWsConnected={isConnected}
           simulatorStatus={simulatorStatus}
+          backendReadiness={backendReadiness}
           onRefresh={handleGlobalRefresh}
           isRefreshing={isRefreshing}
           onLogout={logout}
@@ -133,6 +170,12 @@ export function App() {
           {renderActivePage()}
         </main>
       </div>
+
+      {/* Post-Login Broadcast Announcement Modal */}
+      <BroadcastModal
+        isOpen={showBroadcastModal}
+        onDismiss={handleDismissBroadcast}
+      />
     </div>
   );
 }

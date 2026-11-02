@@ -8,6 +8,7 @@ export interface UserSession {
 }
 
 const SESSION_STORAGE_KEY = 'iot_anomaly_guard_session';
+export const BROADCAST_DISMISSED_KEY = 'iot_anomaly_guard_broadcast_dismissed';
 
 export function useAuth() {
   const [session, setSession] = useState<UserSession | null>(() => {
@@ -31,6 +32,7 @@ export function useAuth() {
   const logout = () => {
     try {
       sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      sessionStorage.removeItem(BROADCAST_DISMISSED_KEY);
     } catch {
       // ignore
     }
