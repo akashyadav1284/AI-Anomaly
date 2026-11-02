@@ -264,3 +264,4 @@ async def list_audit_logs(
 
     total = await db["audit_logs"].count_documents(query)
     return {"items": logs, "total": total}
+

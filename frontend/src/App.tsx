@@ -21,6 +21,7 @@ export function App() {
   const { isAuthenticated, user, login, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<NavTab>('overview');
   const [simulatorStatus, setSimulatorStatus] = useState<string>('stopped');
+  const [isBackendOnline, setIsBackendOnline] = useState<boolean>(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -29,28 +30,29 @@ export function App() {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    const checkSimulator = async () => {
+
+    const checkSystemHealth = async () => {
       try {
-        const s = await apiService.getSimulatorStatus();
-        setSimulatorStatus(s.status);
+        const [h, s] = await Promise.all([
+          apiService.getHealth().catch(() => null),
+          apiService.getSimulatorStatus().catch(() => null),
+        ]);
+        setIsBackendOnline(h !== null && h.status === 'ok');
+        if (s) {
+          setSimulatorStatus(s.status);
+        } else {
+          setSimulatorStatus('stopped');
+        }
       } catch {
+        setIsBackendOnline(false);
         setSimulatorStatus('stopped');
       }
     };
-    checkSimulator();
-    const interval = setInterval(checkSimulator, 10000);
 
-    // Warm-up ping to keep Render backend container hot and awake
-    const keepWarm = () => {
-      apiService.getHealth().catch(() => {});
-    };
-    keepWarm();
-    const warmInterval = setInterval(keepWarm, 25000);
+    checkSystemHealth();
+    const interval = setInterval(checkSystemHealth, 8000);
 
-    return () => {
-      clearInterval(interval);
-      clearInterval(warmInterval);
-    };
+    return () => clearInterval(interval);
   }, [isAuthenticated]);
 
   const handleGlobalRefresh = () => {
@@ -105,6 +107,7 @@ export function App() {
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         isWsConnected={isConnected}
+        isBackendConnected={isBackendOnline}
         activeSimulatorStatus={simulatorStatus}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}

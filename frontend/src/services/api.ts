@@ -103,8 +103,8 @@ async function request<T>(
   } catch (err) {
     clearTimeout(timeoutId);
 
-    // If backend is waking from cold sleep or timed out, immediately return stored snapshot
-    if (isGet) {
+    // If backend is waking from cold sleep or timed out, immediately return stored snapshot (unless skipCache is set)
+    if (isGet && !options?.skipCache) {
       try {
         const stored = localStorage.getItem(cacheKey);
         if (stored) {
@@ -137,9 +137,11 @@ export const apiService = {
     return `${wsProto}//${host}/api/v1/simulator/ws/telemetry?token=${API_KEY}`;
   },
 
-  // Health
-  getHealth: async (): Promise<HealthResponse> => request<HealthResponse>('/health'),
-  getReadiness: async (): Promise<ReadinessResponse> => request<ReadinessResponse>('/ready'),
+  // Health - always bypass cache and never return fallback snapshot for true real-time accuracy
+  getHealth: async (): Promise<HealthResponse> =>
+    request<HealthResponse>('/health', { skipCache: true, timeoutMs: 5000 }),
+  getReadiness: async (): Promise<ReadinessResponse> =>
+    request<ReadinessResponse>('/ready', { skipCache: true, timeoutMs: 5000 }),
 
   // Datasets
   getDatasets: async (params?: {

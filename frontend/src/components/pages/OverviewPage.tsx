@@ -35,27 +35,10 @@ import {
 } from '@/types/api';
 
 export function OverviewPage() {
-  // Initialize with fast default/cached states so page renders in <500ms
+  // Real-time operational states: initialized to null so UI reflects actual live network & DB probe
   const [loading, setLoading] = useState(false);
-  const [health, setHealth] = useState<HealthResponse | null>(() => ({
-    status: 'ok',
-    app_name: 'AI-Based IoT Sensor Anomaly Detection API',
-    version: '0.4.1',
-    environment: 'production',
-    timestamp: new Date().toISOString(),
-  }));
-  const [readiness, setReadiness] = useState<ReadinessResponse | null>(() => ({
-    status: 'ready',
-    timestamp: new Date().toISOString(),
-    components: {
-      api_server: { ready: true, message: 'FastAPI application router and middleware active.' },
-      database: {
-        ready: true,
-        message: 'MongoDB connection active.',
-        details: { configured_target: 'iot_anomaly_detection', status: 'connected' },
-      },
-    },
-  }));
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [readiness, setReadiness] = useState<ReadinessResponse | null>(null);
   const [simStatus, setSimStatus] = useState<SimulatorStatusResponse | null>(null);
   const [recentAnomalies, setRecentAnomalies] = useState<AnomalyRecord[]>([]);
 
@@ -68,9 +51,10 @@ export function OverviewPage() {
         apiService.getSimulatorStatus().catch(() => null),
         apiService.getAnomalies({ limit: 5 }).catch(() => ({ items: [], total: 0 })),
       ]);
-      if (h) setHealth(h);
-      if (r) setReadiness(r);
-      if (s) setSimStatus(s);
+      // Always store actual response (or null if unreachable / timed out)
+      setHealth(h);
+      setReadiness(r);
+      setSimStatus(s);
       if (anom && anom.items) setRecentAnomalies(anom.items);
     } finally {
       setLoading(false);

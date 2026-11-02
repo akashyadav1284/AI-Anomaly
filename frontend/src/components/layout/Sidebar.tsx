@@ -36,6 +36,7 @@ interface SidebarProps {
   activeTab: NavTab;
   onSelectTab: (tab: NavTab) => void;
   isWsConnected?: boolean;
+  isBackendConnected?: boolean;
   activeSimulatorStatus?: string;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -90,6 +91,7 @@ export function Sidebar({
   activeTab,
   onSelectTab,
   isWsConnected = false,
+  isBackendConnected = false,
   activeSimulatorStatus = 'stopped',
   isCollapsed = false,
   onToggleCollapse,
@@ -214,9 +216,19 @@ export function Sidebar({
                   <Server className="w-3.5 h-3.5 text-slate-400" />
                   Backend Node
                 </span>
-                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  Active
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-1 text-[11px] font-medium font-mono',
+                    isBackendConnected ? 'text-emerald-600' : 'text-rose-500'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'w-1.5 h-1.5 rounded-full',
+                      isBackendConnected ? 'bg-emerald-500' : 'bg-rose-500'
+                    )}
+                  />
+                  {isBackendConnected ? 'Active' : 'Offline'}
                 </span>
               </div>
 
