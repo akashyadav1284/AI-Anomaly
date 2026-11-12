@@ -249,6 +249,38 @@ export const apiService = {
     }
   },
 
+  getDevicesStatus: async (): Promise<any[]> => {
+    try {
+      return await request<any[]>('/sensors/devices/status', { skipCache: true });
+    } catch {
+      return [];
+    }
+  },
+
+  sendPhysicalTelemetry: async (payload: {
+    device_id: string;
+    source?: string;
+    sequence?: number;
+    sensors: {
+      temperature: number;
+      humidity: number;
+      accel_x: number;
+      accel_y: number;
+      accel_z: number;
+      gyro_x?: number;
+      gyro_y?: number;
+      gyro_z?: number;
+      acceleration_magnitude?: number;
+      vibration_rms?: number;
+    };
+    model_name?: string;
+  }): Promise<any> => {
+    return request<any>('/sensors/telemetry', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   getSensorReadings: async (
     deviceId: string,
     limit: number = 50,

@@ -271,3 +271,45 @@ class SimulatorControlResponse(BaseModel):
     simulation_id: Optional[str] = None
     playback_speed: Optional[float] = None
 
+
+# ==========================================
+# Physical IoT Device Schemas (Phase 3 & 4)
+# ==========================================
+class PhysicalSensorChannels(BaseModel):
+    """Raw and processed sensor measurements from physical ESP32 node."""
+    temperature: float = Field(..., ge=-40.0, le=125.0, description="Temperature from DHT22 in Celsius")
+    humidity: float = Field(..., ge=0.0, le=100.0, description="Relative humidity from DHT22 in %")
+    accel_x: float = Field(..., ge=-100.0, le=100.0, description="MPU6050 X-axis acceleration in m/s^2")
+    accel_y: float = Field(..., ge=-100.0, le=100.0, description="MPU6050 Y-axis acceleration in m/s^2")
+    accel_z: float = Field(..., ge=-100.0, le=100.0, description="MPU6050 Z-axis acceleration in m/s^2")
+    gyro_x: Optional[float] = Field(0.0, description="MPU6050 X-axis angular velocity in rad/s")
+    gyro_y: Optional[float] = Field(0.0, description="MPU6050 Y-axis angular velocity in rad/s")
+    gyro_z: Optional[float] = Field(0.0, description="MPU6050 Z-axis angular velocity in rad/s")
+    acceleration_magnitude: Optional[float] = Field(None, description="Vector magnitude sqrt(ax^2+ay^2+az^2)")
+    vibration_rms: Optional[float] = Field(None, description="Root Mean Square vibration metric")
+
+
+class PhysicalTelemetryPayload(BaseModel):
+    """Payload schema transmitted by physical ESP32 nodes."""
+    device_id: str = Field(..., min_length=2, max_length=64, description="Unique physical device identifier")
+    source: str = Field(default="physical", description="Origin: 'physical' or 'simulated'")
+    sequence: Optional[int] = Field(None, ge=0, description="Monotonically increasing sequence number")
+    timestamp: Optional[datetime] = Field(default_factory=get_utc_now, description="Reading timestamp in UTC")
+    sensors: PhysicalSensorChannels
+    model_name: Optional[str] = Field(default="isolation_forest", description="ML model for anomaly inference")
+
+
+class DeviceStatusSummary(BaseModel):
+    """Real-time connectivity and health summary for IoT devices."""
+    device_id: str
+    source: str = Field(default="physical", description="'physical' or 'simulated'")
+    status: str = Field(..., description="'online', 'standby', 'offline'")
+    first_seen: datetime
+    last_seen: datetime
+    seconds_since_last_seen: float
+    total_readings: int
+    last_sequence: Optional[int] = None
+    last_reading: Optional[Dict[str, float]] = None
+    sensor_health: Dict[str, bool] = Field(default_factory=dict)
+
+

@@ -601,9 +601,31 @@ export function AnomalyInvestigationPage() {
               <option value="all">All Devices</option>
               {uniqueDevices.map((dev) => (
                 <option key={dev} value={dev}>
-                  {dev}
+                  {dev} {dev.startsWith('ESP32') ? '(Physical)' : ''}
                 </option>
               ))}
+            </select>
+          </div>
+
+          {/* Source Origin Filter (Physical vs Simulated) */}
+          <div className="flex items-center gap-1.5 text-xs text-slate-600">
+            <span className="text-[11px] text-slate-400 font-medium">Source:</span>
+            <select
+              value={searchQuery.startsWith('source:') ? searchQuery : 'all'}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === 'all') {
+                  if (searchQuery.startsWith('source:')) setSearchQuery('');
+                } else {
+                  setSearchQuery(`source:${val}`);
+                }
+                setCurrentPage(1);
+              }}
+              className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium"
+            >
+              <option value="all">All Origins</option>
+              <option value="physical">Physical (ESP32)</option>
+              <option value="simulated">Simulated</option>
             </select>
           </div>
 
@@ -812,9 +834,20 @@ export function AnomalyInvestigationPage() {
                         {/* Incident Main Info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2 mb-1">
-                            <span className="font-semibold text-slate-900 text-xs font-mono truncate">
-                              {anom.device_id}
-                            </span>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="font-semibold text-slate-900 text-xs font-mono truncate">
+                                {anom.device_id}
+                              </span>
+                              {(anom as any).source === 'physical' || anom.device_id.startsWith('ESP32') ? (
+                                <span className="bg-emerald-100 text-emerald-800 text-[9px] px-1 py-0.2 rounded font-semibold font-mono">
+                                  PHYSICAL
+                                </span>
+                              ) : (
+                                <span className="bg-blue-50 text-blue-700 text-[9px] px-1 py-0.2 rounded font-mono">
+                                  SIM
+                                </span>
+                              )}
+                            </div>
                             <div className="flex items-center gap-1.5">
                               {/* Severity Badge */}
                               <Badge
