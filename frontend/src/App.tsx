@@ -22,6 +22,7 @@ export function App() {
   const { isAuthenticated, user, login, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<NavTab>('overview');
   const [simulatorStatus, setSimulatorStatus] = useState<string>('stopped');
+  const [isHardwareOnline, setIsHardwareOnline] = useState<boolean>(false);
   const [isBackendOnline, setIsBackendOnline] = useState<boolean>(false);
   const [backendReadiness, setBackendReadiness] = useState<ReadinessState>('connecting');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -44,10 +45,11 @@ export function App() {
 
     const checkSystemHealth = async () => {
       try {
-        const [h, r, s] = await Promise.all([
+        const [h, r, s, dev] = await Promise.all([
           apiService.getHealth().catch(() => null),
           apiService.getReadiness().catch(() => null),
           apiService.getSimulatorStatus().catch(() => null),
+          apiService.getDevicesStatus().catch(() => []),
         ]);
 
         const isBackendUp = h !== null && h.status === 'ok';
@@ -61,6 +63,12 @@ export function App() {
         } else {
           setBackendReadiness('connecting');
         }
+
+        // Check if physical ESP32 device is currently online (heartbeat <= 30 seconds)
+        const espOnline = Array.isArray(dev) && dev.some(
+          (d: any) => d.status === 'online' && (d.device_id?.startsWith('ESP32') || d.source === 'physical')
+        );
+        setIsHardwareOnline(espOnline);
 
         if (s) {
           setSimulatorStatus(s.status);
@@ -157,7 +165,7 @@ export function App() {
         <Header
           activeTab={activeTab}
           isWsConnected={isConnected}
-          simulatorStatus={simulatorStatus}
+          isHardwareOnline={isHardwareOnline}
           backendReadiness={backendReadiness}
           onRefresh={handleGlobalRefresh}
           isRefreshing={isRefreshing}

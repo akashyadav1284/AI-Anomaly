@@ -7,7 +7,7 @@ import {
   RefreshCw,
   Server,
   Database,
-  Sliders,
+  Radio,
   CheckCircle2,
   XCircle,
   Zap,
@@ -31,7 +31,6 @@ import {
   AnomalyRecord,
   HealthResponse,
   ReadinessResponse,
-  SimulatorStatusResponse,
 } from '@/types/api';
 
 export function OverviewPage() {
@@ -39,22 +38,22 @@ export function OverviewPage() {
   const [loading, setLoading] = useState(false);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [readiness, setReadiness] = useState<ReadinessResponse | null>(null);
-  const [simStatus, setSimStatus] = useState<SimulatorStatusResponse | null>(null);
+  const [devicesStatus, setDevicesStatus] = useState<any[]>([]);
   const [recentAnomalies, setRecentAnomalies] = useState<AnomalyRecord[]>([]);
 
   const loadData = async (showLoadingSpinner: boolean = false) => {
     if (showLoadingSpinner) setLoading(true);
     try {
-      const [h, r, s, anom] = await Promise.all([
+      const [h, r, dev, anom] = await Promise.all([
         apiService.getHealth().catch(() => null),
         apiService.getReadiness().catch(() => null),
-        apiService.getSimulatorStatus().catch(() => null),
+        apiService.getDevicesStatus().catch(() => []),
         apiService.getAnomalies({ limit: 5 }).catch(() => ({ items: [], total: 0 })),
       ]);
       // Always store actual response (or null if unreachable / timed out)
       setHealth(h);
       setReadiness(r);
-      setSimStatus(s);
+      setDevicesStatus(Array.isArray(dev) ? dev : []);
       if (anom && anom.items) setRecentAnomalies(anom.items);
     } finally {
       setLoading(false);
@@ -67,16 +66,13 @@ export function OverviewPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Telemetry trend line data for visualization
-  const trendData = [
-    { time: '10:00', normal: 120, anomaly: 2 },
-    { time: '10:05', normal: 135, anomaly: 1 },
-    { time: '10:10', normal: 128, anomaly: 4 },
-    { time: '10:15', normal: 142, anomaly: 0 },
-    { time: '10:20', normal: 155, anomaly: 3 },
-    { time: '10:25', normal: 148, anomaly: 6 },
-    { time: '10:30', normal: 160, anomaly: 2 },
-  ];
+  // Find genuine physical ESP32 device
+  const espDevice = devicesStatus.find(
+    (d: any) => d.device_id?.startsWith('ESP32') || d.source === 'physical'
+  );
+  const isEspOnline = espDevice?.status === 'online';
+  const totalReadingsProcessed = espDevice?.total_readings ?? 0;
+  const recentAnomalyCount = recentAnomalies.length;
 
   const dbReady = readiness?.components?.database?.ready ?? false;
   const isHealthy = health?.status === 'ok';
@@ -125,35 +121,35 @@ export function OverviewPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           title="Telemetry Processed"
-          value={simStatus?.metrics?.generated_count ?? 0}
-          subtitle="Total sensor frames streamed"
+          value={totalReadingsProcessed}
+          subtitle="Physical sensor readings in DB"
           icon={Activity}
-          loading={loading && !simStatus}
+          loading={loading && devicesStatus.length === 0}
         />
         <MetricCard
-          title="Inferences Executed"
-          value={simStatus?.metrics?.inferred_count ?? 0}
-          subtitle="Real-time ML predictions"
+          title="Hardware Nodes"
+          value={espDevice ? 1 : 0}
+          subtitle={isEspOnline ? "ESP32 DevKit Online" : "ESP32 DevKit Offline"}
           icon={TrendingUp}
-          loading={loading && !simStatus}
+          loading={loading && devicesStatus.length === 0}
         />
         <MetricCard
           title="Flagged Anomalies"
-          value={simStatus?.metrics?.anomalies_detected ?? 0}
-          subtitle="Outliers exceeding threshold"
+          value={recentAnomalyCount}
+          subtitle="Physical anomalies detected"
           icon={AlertTriangle}
-          loading={loading && !simStatus}
+          loading={loading && devicesStatus.length === 0}
         />
         <MetricCard
-          title="Mean Latency"
+          title="Telemetry Age"
           value={
-            simStatus?.metrics?.avg_latency_ms
-              ? `${simStatus.metrics.avg_latency_ms.toFixed(2)} ms`
-              : '0.00 ms'
+            espDevice?.seconds_since_last_seen !== undefined
+              ? `${espDevice.seconds_since_last_seen.toFixed(0)}s ago`
+              : 'N/A'
           }
-          subtitle={`Throughput: ${(simStatus?.metrics?.throughput_rps || 0).toFixed(1)} rps`}
+          subtitle={`Hardware Heartbeat`}
           icon={Cpu}
-          loading={loading && !simStatus}
+          loading={loading && devicesStatus.length === 0}
         />
       </div>
 
@@ -173,52 +169,65 @@ export function OverviewPage() {
             </Badge>
           </CardHeader>
           <CardContent>
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trendData}>
-                  <defs>
-                    <linearGradient id="colorNormalLight" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#2563EB" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#2563EB" stopOpacity={0.0} />
-                    </linearGradient>
-                    <linearGradient id="colorAnomalyLight" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#DC2626" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#DC2626" stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                  <XAxis dataKey="time" stroke="#94A3B8" fontSize={11} tickLine={false} />
-                  <YAxis stroke="#94A3B8" fontSize={11} tickLine={false} axisLine={false} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#FFFFFF',
-                      borderColor: '#E2E8F0',
-                      borderRadius: '8px',
-                      fontSize: '11px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="normal"
-                    stroke="#2563EB"
-                    strokeWidth={2}
-                    fillOpacity={1}
-                    fill="url(#colorNormalLight)"
-                    name="Normal Telemetry"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="anomaly"
-                    stroke="#DC2626"
-                    strokeWidth={2}
-                    fillOpacity={1}
-                    fill="url(#colorAnomalyLight)"
-                    name="Anomalies Flagged"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            {totalReadingsProcessed === 0 && !isEspOnline ? (
+              <div className="h-64 flex flex-col items-center justify-center text-center p-6 bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
+                <Radio className="w-10 h-10 text-slate-400 mb-2 animate-pulse" />
+                <p className="text-sm font-semibold text-slate-700">Waiting for Physical ESP32 Telemetry</p>
+                <p className="text-xs text-slate-500 max-w-sm mt-1">
+                  Connect your physical ESP32 running the DHT22 + MPU6050 firmware. Live streaming trends will chart automatically upon ingestion.
+                </p>
+              </div>
+            ) : (
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={[
+                    { time: 'T-30m', normal: isEspOnline ? totalReadingsProcessed : 0, anomaly: recentAnomalyCount },
+                    { time: 'Now', normal: isEspOnline ? totalReadingsProcessed : 0, anomaly: recentAnomalyCount }
+                  ]}>
+                    <defs>
+                      <linearGradient id="colorNormalLight" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#2563EB" stopOpacity={0.2} />
+                        <stop offset="95%" stopColor="#2563EB" stopOpacity={0.0} />
+                      </linearGradient>
+                      <linearGradient id="colorAnomalyLight" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#DC2626" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#DC2626" stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                    <XAxis dataKey="time" stroke="#94A3B8" fontSize={11} tickLine={false} />
+                    <YAxis stroke="#94A3B8" fontSize={11} tickLine={false} axisLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#FFFFFF',
+                        borderColor: '#E2E8F0',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="normal"
+                      stroke="#2563EB"
+                      strokeWidth={2}
+                      fillOpacity={1}
+                      fill="url(#colorNormalLight)"
+                      name="Physical Telemetry"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="anomaly"
+                      stroke="#DC2626"
+                      strokeWidth={2}
+                      fillOpacity={1}
+                      fill="url(#colorAnomalyLight)"
+                      name="Physical Anomalies"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -264,28 +273,22 @@ export function OverviewPage() {
               </p>
             </div>
 
-            {/* IoT Simulator Engine Health */}
+            {/* Physical ESP32 Hardware Core Health */}
             <div className="p-3.5 rounded-lg bg-slate-50/80 border border-slate-200/80 space-y-1">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold text-slate-700 flex items-center gap-1.5">
-                  <Sliders className="w-3.5 h-3.5 text-slate-500" />
-                  IoT Simulator Engine
+                  <Radio className="w-3.5 h-3.5 text-slate-500" />
+                  ESP32 DevKit Core
                 </span>
                 <Badge
-                  variant={
-                    simStatus?.status === 'running'
-                      ? 'success'
-                      : simStatus?.status === 'paused'
-                      ? 'warning'
-                      : 'outline'
-                  }
-                  className="capitalize"
+                  variant={isEspOnline ? 'success' : 'destructive'}
+                  className="capitalize font-mono"
                 >
-                  {simStatus?.status || 'stopped'}
+                  {isEspOnline ? 'ONLINE' : 'OFFLINE'}
                 </Badge>
               </div>
               <p className="text-[11px] text-slate-500 font-mono">
-                Active devices: {simStatus?.devices?.length || 0}
+                DHT22 & MPU6050: {isEspOnline ? 'Transmitting' : 'Waiting for connection'}
               </p>
             </div>
           </CardContent>

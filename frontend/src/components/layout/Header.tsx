@@ -6,7 +6,7 @@ import { Badge } from '../ui/Badge';
 interface HeaderProps {
   activeTab: NavTab;
   isWsConnected?: boolean;
-  simulatorStatus?: string;
+  isHardwareOnline?: boolean;
   backendReadiness?: 'ready' | 'waking_up' | 'connecting' | 'unavailable';
   onRefresh?: () => void;
   isRefreshing?: boolean;
@@ -30,7 +30,7 @@ const TAB_TITLES: Record<NavTab, { title: string; category: string }> = {
 export function Header({
   activeTab,
   isWsConnected = false,
-  simulatorStatus = 'stopped',
+  isHardwareOnline = false,
   backendReadiness = 'connecting',
   onRefresh,
   isRefreshing = false,
@@ -52,19 +52,17 @@ export function Header({
 
       {/* Real-time Indicators & Controls */}
       <div className="flex items-center gap-3">
-        {/* Simulator Session Badge */}
+        {/* Physical IoT Hardware Badge */}
         <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 text-xs text-slate-700">
           <span
             className={`w-2 h-2 rounded-full ${
-              simulatorStatus === 'running'
+              isHardwareOnline
                 ? 'bg-emerald-500 animate-pulse'
-                : simulatorStatus === 'paused'
-                ? 'bg-amber-500'
-                : 'bg-slate-400'
+                : 'bg-rose-400'
             }`}
           />
-          <span className="text-[11px] font-mono tracking-wide uppercase font-medium">
-            Sim: {simulatorStatus}
+          <span className="text-[11px] font-mono tracking-wide uppercase font-semibold">
+            ESP32: {isHardwareOnline ? 'ONLINE' : 'OFFLINE'}
           </span>
         </div>
 

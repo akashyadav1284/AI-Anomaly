@@ -32,6 +32,12 @@ async def start_simulator(
     repo: MongoRepository = Depends(get_repo),
 ):
     """Start real-time virtual IoT simulation session."""
+    settings = get_settings()
+    if not settings.ENABLE_SIMULATION_ENGINE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Simulation engine is disabled in physical hardware mode. Real physical ESP32 + DHT22 + MPU6050 telemetry is required.",
+        )
     if sim_engine.is_running():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

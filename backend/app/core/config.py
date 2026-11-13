@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
 
+    # Simulation mode (set to False for strict physical hardware mode)
+    ENABLE_SIMULATION_ENGINE: bool = False
+
     # Upload constraints
     MAX_UPLOAD_SIZE_BYTES: int = 15 * 1024 * 1024  # 15 MB limit
 

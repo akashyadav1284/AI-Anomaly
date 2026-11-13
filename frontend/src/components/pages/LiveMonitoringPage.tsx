@@ -1,9 +1,5 @@
 import { useState, useEffect } from 'react';
 import {
-  Play,
-  Pause,
-  Square,
-  RotateCcw,
   AlertOctagon,
   Radio,
   Wifi,
@@ -39,9 +35,8 @@ export function LiveMonitoringPage() {
   } = useSimulatorWebSocket(60);
 
   const [selectedSensor, setSelectedSensor] = useState<string>('all');
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'physical' | 'simulated'>('all');
+  const [sourceFilter] = useState<'physical'>('physical');
   const [selectedChannel, setSelectedChannel] = useState<string>('temperature');
-  const [actionLoading, setActionLoading] = useState(false);
   const [devicesStatus, setDevicesStatus] = useState<any[]>([]);
 
   // Periodically fetch real device status
@@ -57,8 +52,7 @@ export function LiveMonitoringPage() {
   // Filter stream by selected source and device
   const filteredStream = telemetryStream.filter((item: any) => {
     const isPhysical = item.source === 'physical' || (item.device_id && item.device_id.startsWith('ESP32'));
-    if (sourceFilter === 'physical' && !isPhysical) return false;
-    if (sourceFilter === 'simulated' && isPhysical) return false;
+    if (!isPhysical) return false;
     if (selectedSensor !== 'all' && item.device_id !== selectedSensor) return false;
     return true;
   });
@@ -93,75 +87,7 @@ export function LiveMonitoringPage() {
   // Extract latest reading for live gauges
   const latestItem = filteredStream.length > 0 ? filteredStream[filteredStream.length - 1] : latestTelemetry;
   const latestFeat = (latestItem as any)?.features || {};
-  const isLatestPhysical = (latestItem as any)?.source === 'physical' || latestItem?.device_id?.startsWith('ESP32');
-
-  const handleStart = async () => {
-    setActionLoading(true);
-    try {
-      await apiService.startSimulator({
-        devices: ['sim-node-01', 'sim-node-02'],
-        sampling_rate_hz: 2.0,
-        playback_speed: 1.0,
-        model_name: 'isolation_forest',
-        random_seed: 42,
-        persist_to_db: true,
-        anomaly_injections: [
-          {
-            anomaly_type: 'spike',
-            target_channels: ['temperature', 'vibration'],
-            magnitude: 5.0,
-            duration_steps: 10,
-            start_step: 5,
-          },
-          {
-            anomaly_type: 'drift',
-            target_channels: ['pressure', 'current'],
-            magnitude: 3.5,
-            duration_steps: 15,
-            start_step: 25,
-          },
-        ],
-      });
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handlePause = async () => {
-    setActionLoading(true);
-    try {
-      await apiService.pauseSimulator();
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleResume = async () => {
-    setActionLoading(true);
-    try {
-      await apiService.resumeSimulator();
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleStop = async () => {
-    setActionLoading(true);
-    try {
-      await apiService.stopSimulator();
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleReset = async () => {
-    setActionLoading(true);
-    try {
-      await apiService.resetSimulator();
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  const isLatestPhysical = true;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -189,90 +115,15 @@ export function LiveMonitoringPage() {
           </p>
         </div>
 
-        {/* Source Mode Filter */}
+        {/* Physical IoT Status Badge */}
         <div className="flex items-center gap-2">
-          <div className="bg-slate-100 p-1 rounded-lg flex items-center text-xs font-medium">
-            <button
-              onClick={() => setSourceFilter('all')}
-              className={`px-3 py-1 rounded-md transition-all ${
-                sourceFilter === 'all'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Combined
-            </button>
-            <button
-              onClick={() => setSourceFilter('physical')}
-              className={`px-3 py-1 rounded-md transition-all flex items-center gap-1.5 ${
-                sourceFilter === 'physical'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Cpu className="w-3 h-3" /> ESP32 Physical
-            </button>
-            <button
-              onClick={() => setSourceFilter('simulated')}
-              className={`px-3 py-1 rounded-md transition-all ${
-                sourceFilter === 'simulated'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Simulated
-            </button>
-          </div>
-
-          <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleStart}
-              disabled={actionLoading}
-              className="text-xs h-7 text-emerald-600 hover:text-emerald-700"
-            >
-              <Play className="w-3 h-3 mr-1" /> Sim
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handlePause}
-              disabled={actionLoading}
-              className="text-xs h-7"
-            >
-              <Pause className="w-3 h-3" />
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleResume}
-              disabled={actionLoading}
-              className="text-xs h-7"
-              title="Resume simulation"
-            >
-              <Play className="w-3 h-3" />
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleStop}
-              disabled={actionLoading}
-              className="text-xs h-7 text-rose-600 hover:text-rose-700"
-            >
-              <Square className="w-3 h-3" />
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={handleReset}
-              disabled={actionLoading}
-              className="text-xs h-7 text-slate-500 hover:text-slate-900"
-              title="Reset simulation"
-            >
-              <RotateCcw className="w-3 h-3" />
-            </Button>
-          </div>
+          <Badge
+            variant={physicalDevices.length > 0 ? 'success' : 'outline'}
+            className="text-xs font-mono py-1 px-3"
+          >
+            <Cpu className="w-3.5 h-3.5 mr-1.5" />
+            ESP32 HARDWARE: {physicalDevices.length > 0 ? 'ONLINE' : 'WAITING FOR PACKETS'}
+          </Badge>
         </div>
       </div>
 
@@ -412,13 +263,11 @@ export function LiveMonitoringPage() {
               onChange={(e) => setSelectedChannel(e.target.value)}
               className="bg-slate-50 text-xs text-slate-800 rounded-lg px-2.5 py-1.5 border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
-              <option value="temperature">Temperature (°C) [DHT22 / Sim]</option>
-              <option value="humidity">Humidity (%) [DHT22 / Sim]</option>
+              <option value="temperature">Temperature (°C) [DHT22]</option>
+              <option value="humidity">Humidity (%) [DHT22]</option>
               <option value="vibration_rms">Vibration RMS (g) [MPU6050]</option>
               <option value="acceleration_magnitude">Accel Mag (m/s²) [MPU6050]</option>
               <option value="accel_z">Accel Z (m/s²) [MPU6050]</option>
-              <option value="pressure">Pressure (kPa) [Sim]</option>
-              <option value="current">Current (A) [Sim]</option>
               <option value="anomalyScore">Anomaly Confidence (%)</option>
             </select>
           </div>
@@ -450,10 +299,8 @@ export function LiveMonitoringPage() {
           {chartData.length === 0 ? (
             <EmptyState
               icon={Activity}
-              title="Awaiting Live Telemetry Stream"
-              description="Flash and power your ESP32 node or click 'Start Sim' above to stream live sensor readings."
-              actionLabel="Start Simulation"
-              onAction={handleStart}
+              title="Awaiting Live ESP32 Telemetry"
+              description="Power your ESP32 board running the DHT22 + MPU6050 firmware to stream live sensor readings."
             />
           ) : (
             <div className="h-72 w-full">

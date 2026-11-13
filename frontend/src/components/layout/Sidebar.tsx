@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   Database,
   Box,
-  Sliders,
   FlaskConical,
   GitCompare,
   FileText,
@@ -76,7 +75,6 @@ const NAV_GROUPS: NavGroup[] = [
   {
     groupName: 'EXPERIMENTS',
     items: [
-      { id: 'simulator', label: 'Simulation Center', icon: Sliders },
       { id: 'research', label: 'Model Research Lab', icon: FlaskConical },
       { id: 'experiments', label: 'Experiment Compare', icon: GitCompare },
     ],
