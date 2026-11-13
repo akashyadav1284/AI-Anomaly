@@ -3,6 +3,7 @@ import { Sidebar, NavTab } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { SensorWaveBackground } from './components/decorations/SensorWaveBackground';
 import { LoginPage } from './components/LoginPage';
+import { PhysicalSensorIntelligencePage } from './components/pages/PhysicalSensorIntelligencePage';
 import { OverviewPage } from './components/pages/OverviewPage';
 import { LiveMonitoringPage } from './components/pages/LiveMonitoringPage';
 import { SensorExplorerPage } from './components/pages/SensorExplorerPage';
@@ -116,6 +117,8 @@ export function App() {
 
   const renderActivePage = () => {
     switch (activeTab) {
+      case 'physical':
+        return <PhysicalSensorIntelligencePage key={refreshTrigger} />;
       case 'overview':
         return <OverviewPage key={refreshTrigger} />;
       case 'live':

@@ -15,6 +15,7 @@ interface HeaderProps {
 }
 
 const TAB_TITLES: Record<NavTab, { title: string; category: string }> = {
+  physical: { title: 'Physical Sensor Intelligence & 3D Viewport', category: 'Monitor' },
   overview: { title: 'System Overview', category: 'Monitor' },
   live: { title: 'Live Telemetry Workspace', category: 'Monitor' },
   sensors: { title: 'Sensor Device Explorer', category: 'Monitor' },

@@ -2,6 +2,7 @@ import React from 'react';
 import {
   LayoutDashboard,
   Activity,
+  Cpu,
   Radio,
   AlertTriangle,
   Database,
@@ -21,6 +22,7 @@ import { BrandLogo } from '../brand/BrandLogo';
 
 export type NavTab =
   | 'overview'
+  | 'physical'
   | 'live'
   | 'sensors'
   | 'anomalies'
@@ -59,6 +61,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     groupName: 'MONITOR',
     items: [
+      { id: 'physical', label: 'Physical 3D Intel', icon: Cpu },
       { id: 'overview', label: 'Overview', icon: LayoutDashboard },
       { id: 'live', label: 'Live Monitoring', icon: Activity },
       { id: 'sensors', label: 'Sensor Explorer', icon: Radio },
