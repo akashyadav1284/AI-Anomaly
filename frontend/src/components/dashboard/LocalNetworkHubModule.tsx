@@ -2,269 +2,203 @@ import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Wifi, Radio, Unplug, Cloud, Cable, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Wifi, Radio, Unplug, RefreshCw } from 'lucide-react';
 
 interface LocalNetworkHubModuleProps {
   onDirectTelemetry?: (data: any) => void;
+  onIpChanged?: (ip: string) => void;
   isCloudStreaming?: boolean;
 }
 
 export function LocalNetworkHubModule({
   onDirectTelemetry,
-  isCloudStreaming = false,
+  onIpChanged,
 }: LocalNetworkHubModuleProps) {
   const [espIp, setEspIp] = useState<string>(() => {
     return localStorage.getItem('esp32_direct_ip') || '';
   });
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [isSerialConnected, setIsSerialConnected] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('Standby');
+  const [statusMessage, setStatusMessage] = useState('Disconnected');
   const [packetCount, setPacketCount] = useState(0);
+  const [lastPacketTime, setLastPacketTime] = useState<string | null>(null);
 
-  const wsRef = useRef<WebSocket | null>(null);
-  const serialPortRef = useRef<any>(null);
-  const serialReaderRef = useRef<any>(null);
+  const pollIntervalRef = useRef<any>(null);
+  const failCountRef = useRef<number>(0);
 
-  // WebSerial API (Connects ESP32 directly via USB in Chrome/Edge on HTTPS)
-  const connectSerial = async () => {
-    if (!('serial' in navigator)) {
-      alert(
-        'Web Serial API is not supported in this browser. Please use Google Chrome or Microsoft Edge.'
-      );
-      return;
-    }
-
-    try {
-      setStatusMessage('Requesting USB Serial port...');
-      const port = await (navigator as any).serial.requestPort();
-      await port.open({ baudRate: 115200 });
-      serialPortRef.current = port;
-      setIsSerialConnected(true);
-      setStatusMessage('USB Serial Connected! Reading MPU6050 frames at 115200 baud...');
-
-      const textDecoder = new TextDecoderStream();
-      port.readable.pipeTo(textDecoder.writable);
-      const reader = textDecoder.readable.getReader();
-      serialReaderRef.current = reader;
-
-      let buffer = '';
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        if (value) {
-          buffer += value;
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            const clean = line.trim();
-            if (clean.startsWith('TELEMETRY_JSON:')) {
-              try {
-                const jsonStr = clean.replace('TELEMETRY_JSON:', '');
-                const parsed = JSON.parse(jsonStr);
-                setPacketCount((c) => c + 1);
-                if (onDirectTelemetry) {
-                  onDirectTelemetry({
-                    event_type: 'telemetry',
-                    source: 'physical',
-                    device_id: parsed.device_id || 'ESP32_PHYSICAL_01',
-                    features: parsed.sensors || parsed.features || {},
-                    timestamp: new Date().toISOString(),
-                  });
-                }
-              } catch {
-                // partial chunk
-              }
-            }
-          }
-        }
-      }
-    } catch (err: any) {
-      setIsSerialConnected(false);
-      setStatusMessage(err?.name === 'NotFoundError' ? 'USB Port selection cancelled.' : `Serial error: ${err.message}`);
-    }
-  };
-
-  const disconnectSerial = async () => {
-    try {
-      if (serialReaderRef.current) {
-        await serialReaderRef.current.cancel();
-        serialReaderRef.current = null;
-      }
-      if (serialPortRef.current) {
-        await serialPortRef.current.close();
-        serialPortRef.current = null;
-      }
-    } catch (e) {
-      console.warn('Error closing serial:', e);
-    }
-    setIsSerialConnected(false);
-    setStatusMessage('USB Serial disconnected.');
-  };
-
-  const connectToEsp32 = (ipToConnect?: string) => {
-    let ip = ipToConnect || espIp;
+  const connectToEsp32 = async (ipToUse?: string) => {
+    let ip = (ipToUse || espIp).trim();
     if (!ip) {
       const promptIp = window.prompt(
-        'Enter the ESP32 WiFi IP Address printed on the Serial Monitor or OLED screen:',
-        '10.164.5.169'
+        'Enter the ESP32 WiFi IP Address printed on the OLED screen or Serial Monitor:',
+        '192.168.43.100'
       );
       if (!promptIp) return;
       ip = promptIp.trim();
       setEspIp(ip);
     }
 
-    localStorage.setItem('esp32_direct_ip', ip);
     setIsConnecting(true);
-    setStatusMessage(`Connecting to ws://${ip}:81...`);
-
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
+    setStatusMessage(`Connecting to http://${ip}/data...`);
 
     try {
-      const ws = new WebSocket(`ws://${ip}:81`);
-      wsRef.current = ws;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-      ws.onopen = () => {
-        setIsConnected(true);
-        setIsConnecting(false);
-        setStatusMessage(`Connected directly over Local Wi-Fi (${ip})`);
-      };
+      const res = await fetch(`http://${ip}/data`, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json' },
+      });
+      clearTimeout(timeoutId);
 
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          setPacketCount((c) => c + 1);
-          if (onDirectTelemetry) {
-            onDirectTelemetry(data);
-          }
-        } catch {
-          // ignore non-json
-        }
-      };
+      if (!res.ok) {
+        throw new Error(`ESP32 returned HTTP status ${res.status}`);
+      }
 
-      ws.onerror = () => {
-        setIsConnecting(false);
-        setStatusMessage(
-          `Local ws:// was blocked by the browser on HTTPS or Wi-Fi router. Connect via USB Serial below or let ESP32 send via Wi-Fi to Cloud!`
-        );
-      };
-
-      ws.onclose = () => {
-        setIsConnected(false);
-        setIsConnecting(false);
-      };
-    } catch (e: any) {
+      const initialData = await res.json();
+      localStorage.setItem('esp32_direct_ip', ip);
+      setEspIp(ip);
+      setIsConnected(true);
       setIsConnecting(false);
-      setStatusMessage(`Connection error: ${e.message || 'Mixed Content / Security blocked'}`);
+      failCountRef.current = 0;
+      setPacketCount((c) => c + 1);
+      setLastPacketTime(new Date().toLocaleTimeString());
+      setStatusMessage(`Connected & Streaming live from http://${ip}/data`);
+
+      if (onIpChanged) onIpChanged(ip);
+      if (onDirectTelemetry) {
+        onDirectTelemetry({
+          event_type: 'telemetry',
+          source: 'physical',
+          device_id: initialData.device_id || 'ESP32_PHYSICAL_01',
+          features: initialData.sensors || initialData,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      startPolling(ip);
+    } catch (err: any) {
+      setIsConnecting(false);
+      setIsConnected(false);
+      const isMixedContent =
+        typeof window !== 'undefined' &&
+        window.location.protocol === 'https:' &&
+        (err.name === 'TypeError' || err.message?.includes('Failed to fetch'));
+
+      if (isMixedContent) {
+        setStatusMessage(
+          `Browser mixed-content warning: On HTTPS websites, browsers restrict local HTTP. Click 'Allow Insecure Content' in browser site settings or open via http://`
+        );
+      } else {
+        setStatusMessage(`Connection failed: ${err.message || 'ESP32 unreachable'}. Ensure your device is on the same hotspot.`);
+      }
     }
+  };
+
+  const startPolling = (ip: string) => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+    }
+
+    // Stream live readings every 100ms (10 Hz high-speed motion tracking)
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 1500);
+
+        const res = await fetch(`http://${ip}/data`, { signal: controller.signal });
+        clearTimeout(timeout);
+
+        if (res.ok) {
+          const data = await res.json();
+          failCountRef.current = 0;
+          setPacketCount((c) => c + 1);
+          setLastPacketTime(new Date().toLocaleTimeString());
+          setIsConnected(true);
+
+          if (onDirectTelemetry) {
+            onDirectTelemetry({
+              event_type: 'telemetry',
+              source: 'physical',
+              device_id: data.device_id || 'ESP32_PHYSICAL_01',
+              features: data.sensors || data,
+              timestamp: new Date().toISOString(),
+            });
+          }
+        } else {
+          failCountRef.current += 1;
+        }
+      } catch {
+        failCountRef.current += 1;
+        if (failCountRef.current >= 15) {
+          setIsConnected(false);
+          setStatusMessage(`Lost connection to http://${ip}/data. Retrying...`);
+        }
+      }
+    }, 100);
   };
 
   const disconnectEsp32 = () => {
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
     }
+    localStorage.removeItem('esp32_direct_ip');
     setIsConnected(false);
-    setStatusMessage('Disconnected');
+    setIsConnecting(false);
+    setStatusMessage('Disconnected cleanly by user.');
   };
 
   useEffect(() => {
+    const savedIp = localStorage.getItem('esp32_direct_ip');
+    if (savedIp && savedIp.includes('.')) {
+      connectToEsp32(savedIp);
+    }
     return () => {
-      if (wsRef.current) wsRef.current.close();
-      if (serialReaderRef.current) serialReaderRef.current.cancel().catch(() => {});
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
     };
   }, []);
-
-  const isLiveActive = isConnected || isSerialConnected || isCloudStreaming;
 
   return (
     <Card className="border border-slate-200/90 shadow-sm bg-gradient-to-r from-slate-900 to-slate-800 text-white select-none">
       <CardContent className="p-4 sm:p-5">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-          <div className="space-y-1.5 max-w-2xl">
-            <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
               <Wifi className="w-4 h-4 text-emerald-400" />
               <h3 className="text-sm font-semibold tracking-wide">
-                Hardware Live Telemetry Hub
+                Local Network Hub Module
               </h3>
-              {isSerialConnected ? (
-                <Badge className="text-[10px] font-mono tracking-wider uppercase px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                  <Cable className="w-3 h-3 text-emerald-400" /> USB SERIAL ACTIVE (115200 BAUD)
-                </Badge>
-              ) : isConnected ? (
-                <Badge className="text-[10px] font-mono tracking-wider uppercase px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  DIRECT LOCAL WI-FI (0ms LAG)
-                </Badge>
-              ) : isCloudStreaming ? (
-                <Badge className="text-[10px] font-mono tracking-wider uppercase px-2 py-0.5 bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-1">
-                  <Cloud className="w-3 h-3 text-blue-400" /> CLOUD WI-FI ACTIVE (WSS)
-                </Badge>
-              ) : (
-                <Badge className="text-[10px] font-mono tracking-wider uppercase px-2 py-0.5 bg-slate-700/60 text-slate-300 border border-slate-600">
-                  AWAITING HARDWARE PACKETS
-                </Badge>
-              )}
+              <Badge
+                variant={isConnected ? 'success' : 'outline'}
+                className="text-[10px] font-mono tracking-wider uppercase px-2 py-0.5 border-slate-700 text-slate-200"
+              >
+                {isConnected ? 'ONLINE & STREAMING (10 HZ)' : 'DISCONNECTED'}
+              </Badge>
             </div>
 
-            <p className="text-xs text-slate-300">
-              {isLiveActive ? (
-                <span className="text-emerald-400 flex items-center gap-1 font-medium">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Hardware connected and streaming physical telemetry to 3D attitude viewport!
-                </span>
-              ) : (
-                'Choose how you want to connect your ESP32 + MPU6050 + DHT22:'
-              )}
+            <p className="text-xs text-slate-400">
+              Connect your ESP32 + MPU6050 directly over your 2.4 GHz hotspot to stream live numbers.
             </p>
 
             <div className="flex flex-wrap items-center gap-2 pt-1 text-xs font-mono text-slate-300">
-              <span className="text-slate-400 font-sans">Pipeline Status:</span>
-              <span
-                className={
-                  isLiveActive
-                    ? 'text-emerald-400 font-medium'
-                    : 'text-amber-400'
-                }
-              >
-                {isSerialConnected
-                  ? `USB Direct Serial (${packetCount} frames received)`
-                  : isConnected
-                  ? `Direct Wi-Fi (${packetCount} packets)`
-                  : isCloudStreaming
-                  ? 'Cloud Ingestion Active (ESP32 Wi-Fi -> Backend -> Website WSS)'
+              <span className="text-slate-400 font-sans">Status:</span>
+              <span className={isConnected ? 'text-emerald-400 font-medium' : 'text-amber-400'}>
+                {isConnected
+                  ? `🟢 Connected & Streaming over Local WiFi Server (${espIp})`
                   : statusMessage}
               </span>
+              {isConnected && (
+                <span className="text-slate-400">
+                  | Packets: <span className="text-emerald-300 font-semibold">{packetCount}</span> (Last: {lastPacketTime})
+                </span>
+              )}
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 self-start lg:self-center">
-            {/* 1. USB WebSerial Button (1-Click Instant Connection in Browser!) */}
-            {isSerialConnected ? (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={disconnectSerial}
-                className="h-8 text-xs font-medium bg-red-600 hover:bg-red-700 text-white"
-              >
-                <Unplug className="w-3.5 h-3.5 mr-1.5" />
-                Unpair USB
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                onClick={connectSerial}
-                className="h-8 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm flex items-center gap-1.5"
-                title="Connect ESP32 directly via USB in Chrome/Edge with 1 click"
-              >
-                <Cable className="w-3.5 h-3.5" />
-                <Sparkles className="w-3 h-3 text-emerald-200" />
-                Connect via USB Serial
-              </Button>
-            )}
-
-            {/* 2. Direct Wi-Fi IP button */}
+          <div className="flex items-center gap-2 self-end sm:self-center">
             {isConnected ? (
               <Button
                 variant="destructive"
@@ -273,17 +207,21 @@ export function LocalNetworkHubModule({
                 className="h-8 text-xs font-medium bg-red-600 hover:bg-red-700 text-white"
               >
                 <Unplug className="w-3.5 h-3.5 mr-1.5" />
-                Unpair Wi-Fi
+                Unpair Device
               </Button>
             ) : (
               <Button
                 size="sm"
                 onClick={() => connectToEsp32()}
                 disabled={isConnecting}
-                className="h-8 text-xs font-medium bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600 shadow-sm"
+                className="h-8 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white shadow-sm flex items-center gap-1.5"
               >
-                <Radio className="w-3.5 h-3.5 mr-1.5" />
-                Pair Local Wi-Fi
+                {isConnecting ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Radio className="w-3.5 h-3.5" />
+                )}
+                {isConnecting ? 'Connecting...' : 'Connect via WiFi'}
               </Button>
             )}
           </div>

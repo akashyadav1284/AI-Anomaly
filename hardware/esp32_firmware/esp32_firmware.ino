@@ -1,20 +1,16 @@
 /*
  * =====================================================================================
- *  IoT Anomaly Guard - Physical ESP32 Node Firmware (Rock-Solid Hybrid Pipeline)
+ *  IoT Anomaly Guard - Physical ESP32 Node Firmware (Real-Time Hotspot Web Server)
  * =====================================================================================
- *  Dual Streaming Architecture:
- *    1. CLOUD INGESTION PIPELINE (Primary):
- *       ESP32 transmits physical DHT22 + MPU6050 readings over Wi-Fi directly to the
- *       FastAPI backend at:
- *          https://ai-anomaly.onrender.com/api/v1/sensors/telemetry
- *       The backend immediately:
- *         a) Stores data in MongoDB Atlas.
- *         b) Runs AI anomaly detection (Z-score + physics vibration thresholding).
- *         c) Broadcasts live telemetry over Secure WebSocket (WSS) to ALL connected
- *            browsers and dashboards (Works everywhere, including college Wi-Fi & HTTPS).
- *
- *    2. LOCAL WEBSOCKET SERVER (Optional direct pairing on port 81):
- *       Hosts a local WebSocket server (ws://<ESP32_IP>:81) for local networks.
+ *  Architecture:
+ *    - ESP32 connects to your 2.4 GHz Mobile Hotspot / Wi-Fi router.
+ *    - Runs an embedded HTTP WebServer on Port 80 (http://<ESP32_IP>/data).
+ *    - Full CORS headers (Access-Control-Allow-Origin: *) enabled for browser fetch.
+ *    - Directly reads ACTUAL raw physical data from:
+ *        1. MPU6050: Real-time Accel (X, Y, Z), Gyro (X, Y, Z), Vector Magnitude & Vibration RMS
+ *        2. DHT22: Real-time Temperature (°C) & Humidity (%)
+ *    - Zero dummy data, zero simulated values, zero fake fallbacks.
+ *    - SSD1306 OLED displays IP address clearly for entering on the website.
  *
  *  Hardware Pinout:
  *    - DHT22 DATA   --> GPIO 4 (with 10k pull-up resistor to 3.3V)
@@ -26,9 +22,7 @@
  */
 
 #include <WiFi.h>
-#include <HTTPClient.h>
-#include <WiFiClientSecure.h>
-#include <WebSocketsServer.h>
+#include <WebServer.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -48,20 +42,17 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 Adafruit_MPU6050 mpu;
 DHT dht(DHT_PIN, DHT_TYPE);
 
-#if ENABLE_LOCAL_WS_SERVER
-WebSocketsServer wsServer(LOCAL_WS_PORT);
-uint8_t connectedLocalClients = 0;
-#endif
+// WebServer on standard port 80
+WebServer server(LOCAL_HTTP_PORT);
 
 // --- Telemetry State Variables ---
-unsigned long lastTelemetryTime = 0;
 unsigned long lastDhtTime = 0;
 unsigned long lastOledTime = 0;
-unsigned long sequenceNumber = 0;
+unsigned long requestCount = 0;
 
-// Sensor Readings
-float currentTemp = 25.0;
-float currentHumidity = 50.0;
+// Sensor Readings (Actual Physical Measurements)
+float currentTemp = 0.0;
+float currentHumidity = 0.0;
 float accelX = 0.0, accelY = 0.0, accelZ = 9.81;
 float gyroX = 0.0, gyroY = 0.0, gyroZ = 0.0;
 float accelMagnitude = 9.81;
@@ -72,13 +63,7 @@ bool dhtHealthy = false;
 bool mpuHealthy = false;
 bool oledHealthy = false;
 
-// Diagnostics
-String lastTxStatus = "INIT";
-int lastHttpCode = 0;
-unsigned long txSuccessCount = 0;
-unsigned long txFailCount = 0;
-
-// Vibration RMS buffer
+// Vibration RMS buffer (Calculated from real accelerometer dynamics)
 #define VIB_SAMPLE_COUNT 10
 float vibHistory[VIB_SAMPLE_COUNT] = {0};
 int vibIndex = 0;
@@ -91,12 +76,8 @@ void connectWiFi();
 void readDHT22();
 void readMPU6050();
 void updateOledDisplay();
-void sendCloudTelemetry();
-
-#if ENABLE_LOCAL_WS_SERVER
-void broadcastLocalWebSocket();
-void onWebSocketServerEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length);
-#endif
+void handleDataRequest();
+void handleOptions();
 
 // =========================================================================
 // SETUP
@@ -107,7 +88,7 @@ void setup() {
   delay(1000);
   Serial.println("\n=======================================================");
   Serial.println("  IoT Anomaly Guard - Physical ESP32 Hardware Node");
-  Serial.println("  Dual-Pipeline: Cloud HTTPS + Local WebSocket");
+  Serial.println("  Real-time Hotspot Web Server (http://<IP>/data)");
   Serial.println("=======================================================");
 
   // Initialize Hardware I2C (Pins 21 and 22)
@@ -118,17 +99,20 @@ void setup() {
   initMPU6050();
   initDHT22();
 
-  // Connect to Wi-Fi using ESP32 onboard radio
+  // Connect to Wi-Fi Hotspot
   connectWiFi();
 
-#if ENABLE_LOCAL_WS_SERVER
-  wsServer.begin();
-  wsServer.onEvent(onWebSocketServerEvent);
-  Serial.printf("[LOCAL WS] Server listening on ws://%s:%d/\n", 
-                WiFi.localIP().toString().c_str(), LOCAL_WS_PORT);
-#endif
+  // Setup WebServer Endpoints with full CORS support for browser fetch
+  server.on("/data", HTTP_GET, handleDataRequest);
+  server.on("/data", HTTP_OPTIONS, handleOptions);
+  server.onNotFound([]() {
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.send(404, "text/plain", "Not Found");
+  });
 
-  Serial.println("[SYSTEM] Hardware ready. Cloud dispatch active.");
+  server.begin();
+  Serial.printf("\n[HTTP SERVER] Online at http://%s/data\n", WiFi.localIP().toString().c_str());
+  Serial.println("[SYSTEM] Ready! Enter this IP address on your website.");
 }
 
 // =========================================================================
@@ -138,150 +122,63 @@ void setup() {
 void loop() {
   unsigned long now = millis();
 
-  // Wi-Fi Connection Maintenance
+  // Handle incoming HTTP requests from the website
+  server.handleClient();
+
+  // Wi-Fi Auto-Reconnection
   if (WiFi.status() != WL_CONNECTED) {
     static unsigned long lastWifiRetry = 0;
-    if (now - lastWifiRetry > 10000) {
+    if (now - lastWifiRetry > 8000) {
       lastWifiRetry = now;
-      Serial.println("[NETWORK] Wi-Fi lost. Attempting reconnection...");
+      Serial.println("[NETWORK] Hotspot connection lost. Reconnecting...");
       WiFi.reconnect();
     }
   }
 
-#if ENABLE_LOCAL_WS_SERVER
-  wsServer.loop();
-#endif
-
-  // Sample MPU6050 continuously
+  // Continuously read physical MPU6050 motion sensor
   readMPU6050();
 
-  // Read DHT22 every 2 seconds
+  // Read DHT22 every 2 seconds (safe physical sensor limit)
   if (now - lastDhtTime >= 2000) {
     lastDhtTime = now;
     readDHT22();
   }
 
-  // Refresh OLED Display (4 Hz)
+  // Refresh OLED Display (5 Hz)
   if (now - lastOledTime >= OLED_REFRESH_INTERVAL_MS) {
     lastOledTime = now;
     updateOledDisplay();
   }
-
-  // Periodic Telemetry Dispatch (1 Hz to Cloud, 20 Hz to Local WS if connected)
-  if (now - lastTelemetryTime >= TELEMETRY_INTERVAL_MS) {
-    lastTelemetryTime = now;
-
-    // Send to Cloud Ingestion (Powers the live website dashboard over WSS)
-    sendCloudTelemetry();
-
-#if ENABLE_LOCAL_WS_SERVER
-    broadcastLocalWebSocket();
-#endif
-  }
 }
 
 // =========================================================================
-// CLOUD INGESTION DISPATCH (HTTPS POST -> BACKEND -> WEBSOCKET BROADCAST)
+// HTTP /DATA ENDPOINT (SERVES REAL-TIME HARDWARE SENSOR JSON TO WEBSITE)
 // =========================================================================
 
-void sendCloudTelemetry() {
-  if (WiFi.status() != WL_CONNECTED) {
-    lastTxStatus = "NO_WIFI";
-    return;
-  }
+void handleDataRequest() {
+  requestCount++;
 
-  sequenceNumber++;
+  // Ensure latest instantaneous sensor reading
+  readMPU6050();
 
-  // Build JSON Payload
-  String jsonPayload = "{";
-  jsonPayload += "\"device_id\":\"" + String(DEVICE_ID) + "\",";
-  jsonPayload += "\"source\":\"physical\",";
-  jsonPayload += "\"sequence\":" + String(sequenceNumber) + ",";
-  jsonPayload += "\"sensors\":{";
-  jsonPayload += "\"temperature\":" + String(currentTemp, 2) + ",";
-  jsonPayload += "\"humidity\":" + String(currentHumidity, 2) + ",";
-  jsonPayload += "\"accel_x\":" + String(accelX, 3) + ",";
-  jsonPayload += "\"accel_y\":" + String(accelY, 3) + ",";
-  jsonPayload += "\"accel_z\":" + String(accelZ, 3) + ",";
-  jsonPayload += "\"gyro_x\":" + String(gyroX, 3) + ",";
-  jsonPayload += "\"gyro_y\":" + String(gyroY, 3) + ",";
-  jsonPayload += "\"gyro_z\":" + String(gyroZ, 3) + ",";
-  jsonPayload += "\"acceleration_magnitude\":" + String(accelMagnitude, 3) + ",";
-  jsonPayload += "\"vibration_rms\":" + String(vibrationRms, 4);
-  jsonPayload += "}";
-  jsonPayload += "}";
-
-  // Stream clean JSON frame over Serial for direct USB WebSerial browser connection
-  Serial.print("TELEMETRY_JSON:");
-  Serial.println(jsonPayload);
-
-  WiFiClientSecure client;
-  client.setInsecure(); // Skip strict root CA verification for Render TLS
-  
-  HTTPClient http;
-  if (!http.begin(client, BACKEND_URL)) {
-    lastTxStatus = "CONN_FAIL";
-    txFailCount++;
-    return;
-  }
-
-  http.setTimeout(MAX_HTTP_TIMEOUT_MS);
-  http.addHeader("Content-Type", "application/json");
-  http.addHeader("X-API-Key", DEVICE_API_KEY);
-
-  int httpCode = http.POST(jsonPayload);
-  lastHttpCode = httpCode;
-
-  if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_CREATED) {
-    lastTxStatus = "TX_OK";
-    txSuccessCount++;
-    Serial.printf("[TX #%lu] Live Telemetry sent successfully! (HTTP %d)\n", sequenceNumber, httpCode);
-  } else {
-    lastTxStatus = "ERR_" + String(httpCode);
-    txFailCount++;
-    Serial.printf("[TX #%lu] Backend returned code: %d\n", sequenceNumber, httpCode);
-  }
-
-  http.end();
-}
-
-#if ENABLE_LOCAL_WS_SERVER
-// =========================================================================
-// LOCAL WEBSOCKET SERVER EVENT HANDLER
-// =========================================================================
-
-void onWebSocketServerEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
-  switch (type) {
-    case WStype_DISCONNECTED:
-      if (connectedLocalClients > 0) connectedLocalClients--;
-      Serial.printf("[LOCAL WS #%u] Disconnected\n", num);
-      break;
-    case WStype_CONNECTED: {
-      connectedLocalClients++;
-      IPAddress ip = wsServer.remoteIP(num);
-      Serial.printf("[LOCAL WS #%u] Connected from %d.%d.%d.%d\n", num, ip[0], ip[1], ip[2], ip[3]);
-      wsServer.sendTXT(num, "{\"event_type\":\"connected\",\"status\":\"ready\"}");
-      break;
-    }
-    case WStype_TEXT:
-      if (strcmp((char*)payload, "ping") == 0) {
-        wsServer.sendTXT(num, "{\"event_type\":\"pong\"}");
-      }
-      break;
-    default:
-      break;
-  }
-}
-
-void broadcastLocalWebSocket() {
-  if (connectedLocalClients == 0) return;
-
+  // Construct pure real hardware JSON payload
   String json = "{";
-  json += "\"event_type\":\"telemetry\",";
   json += "\"device_id\":\"" + String(DEVICE_ID) + "\",";
   json += "\"source\":\"physical\",";
-  json += "\"sequence\":" + String(sequenceNumber) + ",";
-  json += "\"features\":{";
+  json += "\"request_count\":" + String(requestCount) + ",";
+  json += "\"timestamp\":" + String(millis()) + ",";
+  json += "\"temperature\":" + String(currentTemp, 1) + ",";
+  json += "\"humidity\":" + String(currentHumidity, 1) + ",";
+  json += "\"accel_x\":" + String(accelX, 3) + ",";
+  json += "\"accel_y\":" + String(accelY, 3) + ",";
+  json += "\"accel_z\":" + String(accelZ, 3) + ",";
+  json += "\"gyro_x\":" + String(gyroX, 3) + ",";
+  json += "\"gyro_y\":" + String(gyroY, 3) + ",";
+  json += "\"gyro_z\":" + String(gyroZ, 3) + ",";
+  json += "\"acceleration_magnitude\":" + String(accelMagnitude, 3) + ",";
+  json += "\"vibration_rms\":" + String(vibrationRms, 4) + ",";
+  // Compatible object format for intelligence dashboard
+  json += "\"sensors\":{";
   json += "\"temperature\":" + String(currentTemp, 1) + ",";
   json += "\"humidity\":" + String(currentHumidity, 1) + ",";
   json += "\"accel_x\":" + String(accelX, 3) + ",";
@@ -295,9 +192,19 @@ void broadcastLocalWebSocket() {
   json += "}";
   json += "}";
 
-  wsServer.broadcastTXT(json);
+  // CORS headers permit direct cross-origin browser requests
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.sendHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  server.sendHeader("Access-Control-Allow-Headers", "*");
+  server.send(200, "application/json", json);
 }
-#endif
+
+void handleOptions() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.sendHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  server.sendHeader("Access-Control-Allow-Headers", "*");
+  server.send(204);
+}
 
 // =========================================================================
 // HARDWARE INITIALIZERS
@@ -305,7 +212,7 @@ void broadcastLocalWebSocket() {
 
 void initOled() {
   if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_I2C_ADDR)) {
-    Serial.println("[WARN] SSD1306 OLED allocation failed. Continuing headless.");
+    Serial.println("[WARN] SSD1306 OLED not found at 0x3C. Continuing headless.");
     oledHealthy = false;
   } else {
     oledHealthy = true;
@@ -316,21 +223,21 @@ void initOled() {
     display.println("IoT Anomaly Guard");
     display.println("---------------------");
     display.println("ESP32 Physical Node");
-    display.println("Connecting Wi-Fi...");
+    display.println("Connecting Hotspot...");
     display.display();
   }
 }
 
 void initMPU6050() {
   if (!mpu.begin()) {
-    Serial.println("[ERROR] MPU6050 not detected at 0x68. Check SDA=21, SCL=22.");
+    Serial.println("[ERROR] MPU6050 not detected at 0x68. Check wiring (VCC, GND, SDA=21, SCL=22).");
     mpuHealthy = false;
   } else {
     mpuHealthy = true;
     mpu.setAccelerometerRange(MPU6050_RANGE_4_G);
     mpu.setGyroRange(MPU6050_RANGE_500_DEG);
     mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
-    Serial.println("[SENSOR] MPU6050 online.");
+    Serial.println("[SENSOR] MPU6050 6-Axis Motion Sensor Initialized Successfully.");
   }
 }
 
@@ -345,16 +252,16 @@ void initDHT22() {
     dhtHealthy = true;
     currentTemp = testT;
     currentHumidity = dht.readHumidity();
-    Serial.println("[SENSOR] DHT22 online.");
+    Serial.println("[SENSOR] DHT22 Temperature & Humidity Initialized Successfully.");
   }
 }
 
 // =========================================================================
-// WI-FI SETUP
+// WI-FI HOTSPOT CONNECTION
 // =========================================================================
 
 void connectWiFi() {
-  Serial.printf("[NETWORK] Connecting to Wi-Fi SSID: %s\n", WIFI_SSID);
+  Serial.printf("[NETWORK] Connecting to Hotspot SSID: %s\n", WIFI_SSID);
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -365,14 +272,18 @@ void connectWiFi() {
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.printf("\n[NETWORK] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
+    Serial.printf("\n=======================================================\n");
+    Serial.printf("  [NETWORK] CONNECTED SUCCESSFULLY!\n");
+    Serial.printf("  >>> ESP32 IP ADDRESS: %s <<<\n", WiFi.localIP().toString().c_str());
+    Serial.printf("  >>> Web URL: http://%s/data <<<\n", WiFi.localIP().toString().c_str());
+    Serial.printf("=======================================================\n");
   } else {
     Serial.println("\n[WARN] Wi-Fi connection timed out. Will auto-retry in background.");
   }
 }
 
 // =========================================================================
-// SENSOR ACQUISITION
+// SENSOR ACQUISITION (ACTUAL PHYSICAL READINGS)
 // =========================================================================
 
 void readDHT22() {
@@ -404,20 +315,25 @@ void readMPU6050() {
   sensors_event_t a, g, temp;
   mpu.getEvent(&a, &g, &temp);
 
+  // Pure actual physical acceleration in m/s^2
   accelX = a.acceleration.x;
   accelY = a.acceleration.y;
   accelZ = a.acceleration.z;
 
+  // Pure actual physical angular velocity in rad/s
   gyroX = g.gyro.x;
   gyroY = g.gyro.y;
   gyroZ = g.gyro.z;
 
+  // Vector acceleration magnitude: sqrt(ax^2 + ay^2 + az^2)
   accelMagnitude = sqrt((accelX * accelX) + (accelY * accelY) + (accelZ * accelZ));
 
+  // Dynamic deviation from 1G standard gravity (9.80665 m/s^2)
   float dynamicDelta = abs(accelMagnitude - 9.80665);
   vibHistory[vibIndex] = dynamicDelta;
   vibIndex = (vibIndex + 1) % VIB_SAMPLE_COUNT;
 
+  // Compute Root Mean Square (RMS) of actual physical vibration
   float sumSq = 0.0;
   for (int i = 0; i < VIB_SAMPLE_COUNT; i++) {
     sumSq += (vibHistory[i] * vibHistory[i]);
@@ -436,33 +352,33 @@ void updateOledDisplay() {
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
 
-  // Line 0: Header & Wi-Fi Status
+  // Line 0: Header & Wi-Fi indicator
   display.setCursor(0, 0);
   display.print("IoT Anomaly Guard");
   display.setCursor(102, 0);
   display.print(WiFi.status() == WL_CONNECTED ? "[WiFi]" : "[--]");
   display.drawLine(0, 9, 128, 9, SSD1306_WHITE);
 
-  // Line 1: IP Address
+  // Line 1: IP Address for Website Connection
   display.setCursor(0, 12);
   if (WiFi.status() == WL_CONNECTED) {
-    display.printf("IP:%s", WiFi.localIP().toString().c_str());
+    display.printf("IP: %s", WiFi.localIP().toString().c_str());
   } else {
     display.print("IP: Connecting...");
   }
 
-  // Line 2: DHT22 Readings
+  // Line 2: Actual Physical DHT22 Readings
   display.setCursor(0, 23);
   display.printf("T:%.1fC  H:%.1f%%", currentTemp, currentHumidity);
 
-  // Line 3: MPU6050 Acceleration & Vibration
+  // Line 3: Actual Physical MPU6050 Motion
   display.setCursor(0, 34);
   display.printf("Mag:%.2f Vib:%.2f", accelMagnitude, vibrationRms);
 
-  // Line 4: Transmission State
+  // Line 4: Server Hits Counter
   display.drawLine(0, 46, 128, 46, SSD1306_WHITE);
   display.setCursor(0, 51);
-  display.printf("TX:#%lu [%s]", sequenceNumber, lastTxStatus.c_str());
+  display.printf("HTTP Hits: #%lu", requestCount);
 
   display.display();
 }
