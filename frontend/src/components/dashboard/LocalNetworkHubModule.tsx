@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Wifi, Radio, Unplug, RefreshCw } from 'lucide-react';
+import { Wifi, Radio, Unplug, RefreshCw, Globe, X, Check, ArrowRight } from 'lucide-react';
 
 export function normalizePhysicalData(raw: any) {
   if (!raw) return {};
@@ -77,11 +77,15 @@ export function LocalNetworkHubModule({
   onIpChanged,
 }: LocalNetworkHubModuleProps) {
   const [espIp, setEspIp] = useState<string>(() => {
-    return localStorage.getItem('esp32_direct_ip') || '';
+    return localStorage.getItem('esp32_direct_ip') || '10.164.5.169';
   });
+  const [inputIp, setInputIp] = useState<string>(() => {
+    return localStorage.getItem('esp32_direct_ip') || '10.164.5.169';
+  });
+
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('Disconnected');
+  const [statusMessage, setStatusMessage] = useState('Standby — enter ESP32 Wi-Fi IP and click Connect');
   const [packetCount, setPacketCount] = useState(0);
   const [lastPacketTime, setLastPacketTime] = useState<string | null>(null);
 
@@ -89,25 +93,23 @@ export function LocalNetworkHubModule({
   const failCountRef = useRef<number>(0);
 
   const connectToEsp32 = async (ipToUse?: string) => {
-    let ip = (ipToUse || espIp).trim();
-    if (!ip) {
-      const promptIp = window.prompt(
-        'Enter the ESP32 WiFi IP Address printed on the OLED screen or Serial Monitor:',
-        '10.164.5.169'
-      );
-      if (!promptIp) return;
-      ip = promptIp.trim();
-      setEspIp(ip);
+    let targetIp = (ipToUse || inputIp || espIp).trim();
+    if (!targetIp) {
+      setStatusMessage('Please enter a valid ESP32 Wi-Fi IP address.');
+      return;
     }
 
+    // Clean IP string (remove any accidental http:// or trailing slashes)
+    targetIp = targetIp.replace(/^https?:\/\//i, '').replace(/\/.*$/, '').trim();
+
     setIsConnecting(true);
-    setStatusMessage(`Connecting to http://${ip}/data...`);
+    setStatusMessage(`Connecting to http://${targetIp}/data...`);
 
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-      const res = await fetch(`http://${ip}/data`, {
+      const res = await fetch(`http://${targetIp}/data`, {
         signal: controller.signal,
         headers: { Accept: 'application/json' },
       });
@@ -118,28 +120,29 @@ export function LocalNetworkHubModule({
       }
 
       const initialData = await res.json();
-      localStorage.setItem('esp32_direct_ip', ip);
-      setEspIp(ip);
+      localStorage.setItem('esp32_direct_ip', targetIp);
+      setEspIp(targetIp);
+      setInputIp(targetIp);
       setIsConnected(true);
       setIsConnecting(false);
       failCountRef.current = 0;
       setPacketCount((c) => c + 1);
       setLastPacketTime(new Date().toLocaleTimeString());
-      setStatusMessage(`Connected & Streaming live from http://${ip}/data`);
+      setStatusMessage(`Connected & Streaming live from http://${targetIp}/data`);
 
-      if (onIpChanged) onIpChanged(ip);
+      if (onIpChanged) onIpChanged(targetIp);
       if (onDirectTelemetry) {
         const normalized = normalizePhysicalData(initialData);
         onDirectTelemetry({
           event_type: 'telemetry',
           source: 'physical',
-          device_id: initialData.device_id || 'ESP32_PHYSICAL_01',
+          device_id: initialData.device_id || `ESP32_${targetIp.replace(/\./g, '_')}`,
           features: normalized,
           timestamp: new Date().toISOString(),
         });
       }
 
-      startPolling(ip);
+      startPolling(targetIp);
     } catch (err: any) {
       setIsConnecting(false);
       setIsConnected(false);
@@ -150,15 +153,15 @@ export function LocalNetworkHubModule({
 
       if (isMixedContent) {
         setStatusMessage(
-          `Browser mixed-content warning: On HTTPS websites, browsers restrict local HTTP. Click 'Allow Insecure Content' in browser site settings or open via http://`
+          `Browser mixed-content warning: On HTTPS websites, browsers restrict local HTTP. Click 'Site Settings' -> 'Insecure Content' -> 'Allow' or open via http://`
         );
       } else {
-        setStatusMessage(`Connection failed: ${err.message || 'ESP32 unreachable'}. Ensure your device is on the same hotspot.`);
+        setStatusMessage(`Connection failed to ${targetIp}: ${err.message || 'ESP32 unreachable'}. Ensure device is powered on same hotspot.`);
       }
     }
   };
 
-  const startPolling = (ip: string) => {
+  const startPolling = (targetIp: string) => {
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current);
     }
@@ -169,7 +172,7 @@ export function LocalNetworkHubModule({
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 1200);
 
-        const res = await fetch(`http://${ip}/data`, { signal: controller.signal });
+        const res = await fetch(`http://${targetIp}/data`, { signal: controller.signal });
         clearTimeout(timeout);
 
         if (res.ok) {
@@ -184,7 +187,7 @@ export function LocalNetworkHubModule({
             onDirectTelemetry({
               event_type: 'telemetry',
               source: 'physical',
-              device_id: data.device_id || 'ESP32_PHYSICAL_01',
+              device_id: data.device_id || `ESP32_${targetIp.replace(/\./g, '_')}`,
               features: normalized,
               timestamp: new Date().toISOString(),
             });
@@ -196,7 +199,7 @@ export function LocalNetworkHubModule({
         failCountRef.current += 1;
         if (failCountRef.current >= 15) {
           setIsConnected(false);
-          setStatusMessage(`Lost connection to http://${ip}/data. Retrying...`);
+          setStatusMessage(`Lost connection to http://${targetIp}/data. Retrying...`);
         }
       }
     }, 80);
@@ -207,10 +210,14 @@ export function LocalNetworkHubModule({
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
     }
-    localStorage.removeItem('esp32_direct_ip');
     setIsConnected(false);
     setIsConnecting(false);
     setStatusMessage('Disconnected cleanly by user.');
+  };
+
+  const handleClearIp = () => {
+    setInputIp('');
+    localStorage.removeItem('esp32_direct_ip');
   };
 
   useEffect(() => {
@@ -228,9 +235,10 @@ export function LocalNetworkHubModule({
   return (
     <Card className="border border-slate-200/90 shadow-sm bg-gradient-to-r from-slate-900 to-slate-800 text-white select-none">
       <CardContent className="p-4 sm:p-5">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+          {/* Left Info & Status */}
+          <div className="space-y-1.5 flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
               <Wifi className="w-4 h-4 text-emerald-400" />
               <h3 className="text-sm font-semibold tracking-wide">
                 Local Network Hub Module
@@ -239,19 +247,24 @@ export function LocalNetworkHubModule({
                 variant={isConnected ? 'success' : 'outline'}
                 className="text-[10px] font-mono tracking-wider uppercase px-2 py-0.5 border-slate-700 text-slate-200"
               >
-                {isConnected ? 'ONLINE & STREAMING (10 HZ)' : 'DISCONNECTED'}
+                {isConnected ? 'ONLINE & STREAMING (12.5 HZ)' : 'DISCONNECTED'}
               </Badge>
+              {isConnected && (
+                <span className="text-[11px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded flex items-center gap-1">
+                  <Check className="w-3 h-3 text-emerald-400" /> {espIp}
+                </span>
+              )}
             </div>
 
             <p className="text-xs text-slate-400">
-              Connect your ESP32 + MPU6050 directly over your 2.4 GHz hotspot to stream live numbers.
+              Connect your ESP32 + MPU6050 directly over your 2.4 GHz hotspot to stream real-time motion and environmental telemetry.
             </p>
 
             <div className="flex flex-wrap items-center gap-2 pt-1 text-xs font-mono text-slate-300">
               <span className="text-slate-400 font-sans">Status:</span>
               <span className={isConnected ? 'text-emerald-400 font-medium' : 'text-amber-400'}>
                 {isConnected
-                  ? `🟢 Connected & Streaming over Local WiFi Server (${espIp})`
+                  ? `🟢 Streaming active from http://${espIp}/data`
                   : statusMessage}
               </span>
               {isConnected && (
@@ -262,32 +275,76 @@ export function LocalNetworkHubModule({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-end sm:self-center">
-            {isConnected ? (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={disconnectEsp32}
-                className="h-8 text-xs font-medium bg-red-600 hover:bg-red-700 text-white"
-              >
-                <Unplug className="w-3.5 h-3.5 mr-1.5" />
-                Unpair Device
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                onClick={() => connectToEsp32()}
-                disabled={isConnecting}
-                className="h-8 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white shadow-sm flex items-center gap-1.5"
-              >
-                {isConnecting ? (
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Radio className="w-3.5 h-3.5" />
-                )}
-                {isConnecting ? 'Connecting...' : 'Connect via WiFi'}
-              </Button>
-            )}
+          {/* Right: Dedicated ESP32 IP Entry Bar & Actions */}
+          <div className="w-full lg:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            {/* IP Address Input Bar */}
+            <div className="relative flex items-center">
+              <div className="absolute left-2.5 flex items-center pointer-events-none text-slate-400">
+                <Globe className="w-3.5 h-3.5" />
+              </div>
+              <input
+                type="text"
+                placeholder="Enter ESP32 IP (e.g. 192.168.43.100)"
+                value={inputIp}
+                onChange={(e) => setInputIp(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !isConnecting && !isConnected) {
+                    connectToEsp32(inputIp);
+                  }
+                }}
+                disabled={isConnected || isConnecting}
+                className={`h-9 pl-8 pr-7 text-xs font-mono rounded-lg border transition-all w-full sm:w-64 focus:outline-none ${
+                  isConnected
+                    ? 'bg-slate-950/80 border-emerald-500/50 text-emerald-300 font-semibold cursor-not-allowed'
+                    : 'bg-slate-950/90 border-slate-700 text-white placeholder:text-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'
+                }`}
+              />
+              {inputIp && !isConnected && !isConnecting && (
+                <button
+                  type="button"
+                  onClick={handleClearIp}
+                  className="absolute right-2 text-slate-400 hover:text-white p-0.5 rounded transition-colors"
+                  title="Clear IP"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Connect / Disconnect Buttons */}
+            <div className="flex items-center gap-2">
+              {isConnected ? (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={disconnectEsp32}
+                  className="h-9 text-xs font-medium bg-red-600 hover:bg-red-700 text-white shadow-sm flex items-center gap-1.5"
+                >
+                  <Unplug className="w-3.5 h-3.5" />
+                  Disconnect
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={() => connectToEsp32(inputIp)}
+                  disabled={isConnecting || !inputIp.trim()}
+                  className="h-9 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isConnecting ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      Connecting...
+                    </>
+                  ) : (
+                    <>
+                      <Radio className="w-3.5 h-3.5" />
+                      Connect via WiFi
+                      <ArrowRight className="w-3 h-3 ml-0.5" />
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </CardContent>
