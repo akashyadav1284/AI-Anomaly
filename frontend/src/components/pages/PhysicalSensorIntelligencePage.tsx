@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { PhysicalSensorIntelligenceHeader } from '@/components/dashboard/PhysicalSensorIntelligenceHeader';
-import { LocalNetworkHubModule } from '@/components/dashboard/LocalNetworkHubModule';
+import { LocalNetworkHubModule, normalizePhysicalData } from '@/components/dashboard/LocalNetworkHubModule';
 import { PhysicalSummaryCards, PhysicalMetrics } from '@/components/dashboard/PhysicalSummaryCards';
 import { MPU6050Canvas3D, MPU6050Telemetry } from '@/components/dashboard/MPU6050Canvas3D';
 import { EnvironmentalMotionCharts } from '@/components/dashboard/EnvironmentalMotionCharts';
@@ -19,8 +19,9 @@ export function PhysicalSensorIntelligencePage() {
   const [healthStatus, setHealthStatus] = useState<any | null>(null);
   const [readinessStatus, setReadinessStatus] = useState<any | null>(null);
 
-  // Direct Local Wi-Fi WebSocket telemetry state (from ESP32 port 81)
+  // Direct Local Wi-Fi telemetry state (from ESP32 http://<ip>/data)
   const [directTelemetry, setDirectTelemetry] = useState<any | null>(null);
+  const lastDirectUpdateRef = useRef<number>(Date.now());
 
   // Real-time Cloud/Backend WebSocket feed
   const { isConnected: isCloudConnected, latestTelemetry: cloudTelemetry } = useSimulatorWebSocket(100);
@@ -28,31 +29,40 @@ export function PhysicalSensorIntelligencePage() {
   // Prioritize direct local Wi-Fi telemetry if paired, else backend cloud stream
   const activeTelemetry = directTelemetry || cloudTelemetry;
 
-  // Extract latest incoming physical reading
+  // Extract and normalize latest incoming physical reading
   const isLatestPhysical =
     Boolean(directTelemetry) ||
     (activeTelemetry as any)?.source === 'physical' ||
     activeTelemetry?.device_id?.startsWith('ESP32');
 
-  const latestFeat: PhysicalMetrics = isLatestPhysical
-    ? (activeTelemetry as any)?.features || {}
-    : {};
+  const latestFeat: PhysicalMetrics = useMemo(() => {
+    if (!isLatestPhysical || !activeTelemetry) return {};
+    const raw = (activeTelemetry as any)?.features || activeTelemetry;
+    return normalizePhysicalData(raw);
+  }, [activeTelemetry, isLatestPhysical]);
 
-  // Formatted MPU6050 object for 3D Viewport
-  const mpuTelemetry: MPU6050Telemetry | null =
-    latestFeat.accel_z !== undefined || latestFeat.gyro_z !== undefined
-      ? {
-          accel_x: latestFeat.accel_x ?? 0,
-          accel_y: latestFeat.accel_y ?? 0,
-          accel_z: latestFeat.accel_z ?? 9.81,
-          gyro_x: latestFeat.gyro_x ?? 0,
-          gyro_y: latestFeat.gyro_y ?? 0,
-          gyro_z: latestFeat.gyro_z ?? 0,
-          accel_magnitude: latestFeat.acceleration_magnitude,
-          vibration_rms: latestFeat.vibration_rms,
-          timestamp: activeTelemetry?.timestamp,
-        }
-      : null;
+  // Formatted MPU6050 object for 3D Viewport - activate if any axis is present
+  const hasMpu =
+    latestFeat.accel_x !== undefined ||
+    latestFeat.accel_y !== undefined ||
+    latestFeat.accel_z !== undefined ||
+    latestFeat.gyro_x !== undefined ||
+    latestFeat.gyro_y !== undefined ||
+    latestFeat.gyro_z !== undefined;
+
+  const mpuTelemetry: MPU6050Telemetry | null = hasMpu
+    ? {
+        accel_x: latestFeat.accel_x ?? 0,
+        accel_y: latestFeat.accel_y ?? 0,
+        accel_z: latestFeat.accel_z ?? 9.81,
+        gyro_x: latestFeat.gyro_x ?? 0,
+        gyro_y: latestFeat.gyro_y ?? 0,
+        gyro_z: latestFeat.gyro_z ?? 0,
+        accel_magnitude: latestFeat.acceleration_magnitude,
+        vibration_rms: latestFeat.vibration_rms,
+        timestamp: activeTelemetry?.timestamp,
+      }
+    : null;
 
   // Polling device health & historical records
   const loadHardwareStatus = async () => {
@@ -112,14 +122,20 @@ export function PhysicalSensorIntelligencePage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Update rows when new physical telemetry arrives via WebSocket (Direct or Cloud)
+  // Update rows when new physical telemetry arrives via Wi-Fi (Direct or Cloud)
   useEffect(() => {
     if (!activeTelemetry || !isLatestPhysical) return;
-    const f = (activeTelemetry as any).features || {};
+
+    // Rate limit historical row appends to 1 Hz so React chart renders smoothly
+    const now = Date.now();
+    if (now - lastDirectUpdateRef.current < 500) return;
+    lastDirectUpdateRef.current = now;
+
+    const f = latestFeat;
     const newRow: PhysicalTelemetryRow = {
       reading_id: (activeTelemetry as any).reading_id || `PHYS_${Date.now()}`,
       timestamp: activeTelemetry.timestamp || new Date().toISOString(),
-      sequence: (activeTelemetry as any).sequence,
+      sequence: (activeTelemetry as any).sequence || (activeTelemetry as any).request_count,
       temperature: f.temperature,
       humidity: f.humidity,
       accel_x: f.accel_x,
@@ -133,7 +149,7 @@ export function PhysicalSensorIntelligencePage() {
       is_anomaly: (activeTelemetry as any).prediction?.is_anomaly,
     };
     setHistoricalRows((prev) => [newRow, ...prev.slice(0, 99)]);
-  }, [activeTelemetry]);
+  }, [activeTelemetry, latestFeat, isLatestPhysical]);
 
   // Sparkline and chart history data mapping
   const chartHistory = historicalRows

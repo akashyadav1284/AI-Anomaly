@@ -4,6 +4,68 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Wifi, Radio, Unplug, RefreshCw } from 'lucide-react';
 
+export function normalizePhysicalData(raw: any) {
+  if (!raw) return {};
+  const src = raw.sensors || raw.features || raw;
+
+  // Accel X (support accel_x, x, ax, accelX, a_x)
+  const rawAx = src.accel_x ?? src.x ?? src.ax ?? src.accelX ?? src.a_x;
+  const ax = rawAx !== undefined && rawAx !== null && !isNaN(Number(rawAx)) ? Number(rawAx) : undefined;
+
+  // Accel Y (support accel_y, y, ay, accelY, a_y)
+  const rawAy = src.accel_y ?? src.y ?? src.ay ?? src.accelY ?? src.a_y;
+  const ay = rawAy !== undefined && rawAy !== null && !isNaN(Number(rawAy)) ? Number(rawAy) : undefined;
+
+  // Accel Z (support accel_z, z, az, accelZ, a_z)
+  const rawAz = src.accel_z ?? src.z ?? src.az ?? src.accelZ ?? src.a_z;
+  const az = rawAz !== undefined && rawAz !== null && !isNaN(Number(rawAz)) ? Number(rawAz) : undefined;
+
+  // Gyro X
+  const rawGx = src.gyro_x ?? src.gx ?? src.gyroX ?? src.g_x;
+  const gx = rawGx !== undefined && rawGx !== null && !isNaN(Number(rawGx)) ? Number(rawGx) : 0;
+
+  // Gyro Y
+  const rawGy = src.gyro_y ?? src.gy ?? src.gyroY ?? src.g_y;
+  const gy = rawGy !== undefined && rawGy !== null && !isNaN(Number(rawGy)) ? Number(rawGy) : 0;
+
+  // Gyro Z
+  const rawGz = src.gyro_z ?? src.gz ?? src.gyroZ ?? src.g_z;
+  const gz = rawGz !== undefined && rawGz !== null && !isNaN(Number(rawGz)) ? Number(rawGz) : 0;
+
+  // Temperature
+  const rawTemp = src.temperature ?? src.temp ?? src.t ?? src.temp_c;
+  const temp = rawTemp !== undefined && rawTemp !== null && !isNaN(Number(rawTemp)) ? Number(rawTemp) : undefined;
+
+  // Humidity
+  const rawHum = src.humidity ?? src.hum ?? src.h ?? src.humidity_percent;
+  const hum = rawHum !== undefined && rawHum !== null && !isNaN(Number(rawHum)) ? Number(rawHum) : undefined;
+
+  // Acceleration Magnitude
+  let mag = src.acceleration_magnitude ?? src.mag;
+  if (mag === undefined && ax !== undefined && ay !== undefined && az !== undefined) {
+    mag = Math.sqrt(ax * ax + ay * ay + az * az);
+  }
+
+  // Vibration RMS
+  let vib = src.vibration_rms ?? src.vibration ?? src.vib;
+  if (vib === undefined && mag !== undefined) {
+    vib = Math.abs(mag - 9.80665);
+  }
+
+  return {
+    accel_x: ax,
+    accel_y: ay,
+    accel_z: az,
+    gyro_x: gx,
+    gyro_y: gy,
+    gyro_z: gz,
+    temperature: temp,
+    humidity: hum,
+    acceleration_magnitude: mag !== undefined ? Number(Number(mag).toFixed(3)) : undefined,
+    vibration_rms: vib !== undefined ? Number(Number(vib).toFixed(4)) : undefined,
+  };
+}
+
 interface LocalNetworkHubModuleProps {
   onDirectTelemetry?: (data: any) => void;
   onIpChanged?: (ip: string) => void;
@@ -31,7 +93,7 @@ export function LocalNetworkHubModule({
     if (!ip) {
       const promptIp = window.prompt(
         'Enter the ESP32 WiFi IP Address printed on the OLED screen or Serial Monitor:',
-        '192.168.43.100'
+        '10.164.5.169'
       );
       if (!promptIp) return;
       ip = promptIp.trim();
@@ -67,11 +129,12 @@ export function LocalNetworkHubModule({
 
       if (onIpChanged) onIpChanged(ip);
       if (onDirectTelemetry) {
+        const normalized = normalizePhysicalData(initialData);
         onDirectTelemetry({
           event_type: 'telemetry',
           source: 'physical',
           device_id: initialData.device_id || 'ESP32_PHYSICAL_01',
-          features: initialData.sensors || initialData,
+          features: normalized,
           timestamp: new Date().toISOString(),
         });
       }
@@ -100,11 +163,11 @@ export function LocalNetworkHubModule({
       clearInterval(pollIntervalRef.current);
     }
 
-    // Stream live readings every 100ms (10 Hz high-speed motion tracking)
+    // Stream live readings every 80ms (12.5 Hz high-speed motion tracking)
     pollIntervalRef.current = setInterval(async () => {
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 1500);
+        const timeout = setTimeout(() => controller.abort(), 1200);
 
         const res = await fetch(`http://${ip}/data`, { signal: controller.signal });
         clearTimeout(timeout);
@@ -117,11 +180,12 @@ export function LocalNetworkHubModule({
           setIsConnected(true);
 
           if (onDirectTelemetry) {
+            const normalized = normalizePhysicalData(data);
             onDirectTelemetry({
               event_type: 'telemetry',
               source: 'physical',
               device_id: data.device_id || 'ESP32_PHYSICAL_01',
-              features: data.sensors || data,
+              features: normalized,
               timestamp: new Date().toISOString(),
             });
           }
@@ -135,7 +199,7 @@ export function LocalNetworkHubModule({
           setStatusMessage(`Lost connection to http://${ip}/data. Retrying...`);
         }
       }
-    }, 100);
+    }, 80);
   };
 
   const disconnectEsp32 = () => {

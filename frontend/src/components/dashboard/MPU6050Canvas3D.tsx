@@ -29,7 +29,8 @@ export function MPU6050Canvas3D({ telemetry, isStreaming = false }: MPU6050Canva
   const mountRef = useRef<HTMLDivElement>(null);
   const [viewMode, setViewMode] = useState<'fusion' | 'accel' | 'gyro'>('fusion');
   const [isPaused, setIsPaused] = useState(false);
-  const smoothingSpeed = 0.15;
+  const [displayAngles, setDisplayAngles] = useState({ pitch: 0, roll: 0, yaw: 0 });
+  const smoothingSpeed = 0.25;
 
   // Orientation state estimates (radians)
   const orientationRef = useRef<{ pitch: number; roll: number; yaw: number }>({
@@ -72,7 +73,10 @@ export function MPU6050Canvas3D({ telemetry, isStreaming = false }: MPU6050Canva
     const gy = ((telemetry.gyro_y ?? 0) * Math.PI) / 180.0;
     const gz = ((telemetry.gyro_z ?? 0) * Math.PI) / 180.0;
 
-    if (viewMode === 'accel') {
+    const hasActiveGyro = Math.abs(gx) > 0.001 || Math.abs(gy) > 0.001 || Math.abs(gz) > 0.001;
+
+    if (viewMode === 'accel' || !hasActiveGyro) {
+      // Direct accelerometer attitude tracking (immediate 1-to-1 tilt response)
       orientationRef.current.pitch = accelPitch;
       orientationRef.current.roll = accelRoll;
     } else if (viewMode === 'gyro') {
@@ -80,14 +84,21 @@ export function MPU6050Canvas3D({ telemetry, isStreaming = false }: MPU6050Canva
       orientationRef.current.roll += gy * dt;
       orientationRef.current.yaw += gz * dt;
     } else {
-      // Complementary filter (alpha = 0.96 gyro, 0.04 accel)
-      const alpha = 0.96;
+      // Complementary filter
+      const alpha = 0.88;
       orientationRef.current.pitch =
         alpha * (orientationRef.current.pitch + gy * dt) + (1.0 - alpha) * accelPitch;
       orientationRef.current.roll =
         alpha * (orientationRef.current.roll + gx * dt) + (1.0 - alpha) * accelRoll;
-      orientationRef.current.yaw += gz * dt; // Yaw integrates gyro_z
+      orientationRef.current.yaw += gz * dt;
     }
+
+    // Update state for live UI degree readout
+    setDisplayAngles({
+      pitch: Number(((orientationRef.current.pitch * 180) / Math.PI).toFixed(1)),
+      roll: Number(((orientationRef.current.roll * 180) / Math.PI).toFixed(1)),
+      yaw: Number(((orientationRef.current.yaw * 180) / Math.PI).toFixed(1)),
+    });
   }, [telemetry, viewMode, isPaused]);
 
   // Initialize Three.js WebGL Scene
@@ -298,13 +309,14 @@ export function MPU6050Canvas3D({ telemetry, isStreaming = false }: MPU6050Canva
       sensorGroupRef.current.rotation.set(0, 0, 0);
     }
     cameraAngleRef.current = { theta: Math.PI / 4, phi: Math.PI / 4, radius: 6.5 };
+    setDisplayAngles({ pitch: 0, roll: 0, yaw: 0 });
     updateCameraPosition();
   };
 
   // Convert current Euler angles to degrees for display
-  const pitchDeg = ((orientationRef.current.pitch * 180) / Math.PI).toFixed(1);
-  const rollDeg = ((orientationRef.current.roll * 180) / Math.PI).toFixed(1);
-  const yawDeg = ((orientationRef.current.yaw * 180) / Math.PI).toFixed(1);
+  const pitchDeg = displayAngles.pitch.toFixed(1);
+  const rollDeg = displayAngles.roll.toFixed(1);
+  const yawDeg = displayAngles.yaw.toFixed(1);
 
   return (
     <div className="relative w-full rounded-xl overflow-hidden border border-slate-200 bg-white shadow-card flex flex-col lg:flex-row">

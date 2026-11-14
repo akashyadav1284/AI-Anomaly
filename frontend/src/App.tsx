@@ -65,10 +65,16 @@ export function App() {
           setBackendReadiness('connecting');
         }
 
-        // Check if physical ESP32 device is currently online (heartbeat <= 30 seconds)
-        const espOnline = Array.isArray(dev) && dev.some(
-          (d: any) => d.status === 'online' && (d.device_id?.startsWith('ESP32') || d.source === 'physical')
-        );
+        // Check if physical ESP32 device is currently online (heartbeat <= 30 seconds or direct hotspot IP active)
+        const hasDirectIp = Boolean(localStorage.getItem('esp32_direct_ip'));
+        const espOnline =
+          hasDirectIp ||
+          (Array.isArray(dev) &&
+            dev.some(
+              (d: any) =>
+                d.status === 'online' &&
+                (d.device_id?.startsWith('ESP32') || d.source === 'physical')
+            ));
         setIsHardwareOnline(espOnline);
 
         if (s) {

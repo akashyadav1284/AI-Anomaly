@@ -161,32 +161,51 @@ void handleDataRequest() {
   // Ensure latest instantaneous sensor reading
   readMPU6050();
 
-  // Construct pure real hardware JSON payload
+  // Construct pure real hardware JSON payload with all key aliases (xyz, accel_xyz, gx/gy/gz)
   String json = "{";
   json += "\"device_id\":\"" + String(DEVICE_ID) + "\",";
   json += "\"source\":\"physical\",";
   json += "\"request_count\":" + String(requestCount) + ",";
   json += "\"timestamp\":" + String(millis()) + ",";
-  json += "\"temperature\":" + String(currentTemp, 1) + ",";
-  json += "\"humidity\":" + String(currentHumidity, 1) + ",";
+  // Direct xyz properties
+  json += "\"x\":" + String(accelX, 3) + ",";
+  json += "\"y\":" + String(accelY, 3) + ",";
+  json += "\"z\":" + String(accelZ, 3) + ",";
+  // Standard accel_xyz properties
   json += "\"accel_x\":" + String(accelX, 3) + ",";
   json += "\"accel_y\":" + String(accelY, 3) + ",";
   json += "\"accel_z\":" + String(accelZ, 3) + ",";
+  // Gyroscope angular velocity
+  json += "\"gx\":" + String(gyroX, 3) + ",";
+  json += "\"gy\":" + String(gyroY, 3) + ",";
+  json += "\"gz\":" + String(gyroZ, 3) + ",";
   json += "\"gyro_x\":" + String(gyroX, 3) + ",";
   json += "\"gyro_y\":" + String(gyroY, 3) + ",";
   json += "\"gyro_z\":" + String(gyroZ, 3) + ",";
+  // Environmental readings
+  json += "\"temperature\":" + String(currentTemp, 1) + ",";
+  json += "\"humidity\":" + String(currentHumidity, 1) + ",";
+  json += "\"temp\":" + String(currentTemp, 1) + ",";
+  json += "\"hum\":" + String(currentHumidity, 1) + ",";
+  // Computed dynamic physical vectors
   json += "\"acceleration_magnitude\":" + String(accelMagnitude, 3) + ",";
   json += "\"vibration_rms\":" + String(vibrationRms, 4) + ",";
-  // Compatible object format for intelligence dashboard
+  // Compatible nested object format for intelligence dashboard
   json += "\"sensors\":{";
-  json += "\"temperature\":" + String(currentTemp, 1) + ",";
-  json += "\"humidity\":" + String(currentHumidity, 1) + ",";
+  json += "\"x\":" + String(accelX, 3) + ",";
+  json += "\"y\":" + String(accelY, 3) + ",";
+  json += "\"z\":" + String(accelZ, 3) + ",";
   json += "\"accel_x\":" + String(accelX, 3) + ",";
   json += "\"accel_y\":" + String(accelY, 3) + ",";
   json += "\"accel_z\":" + String(accelZ, 3) + ",";
+  json += "\"gx\":" + String(gyroX, 3) + ",";
+  json += "\"gy\":" + String(gyroY, 3) + ",";
+  json += "\"gz\":" + String(gyroZ, 3) + ",";
   json += "\"gyro_x\":" + String(gyroX, 3) + ",";
   json += "\"gyro_y\":" + String(gyroY, 3) + ",";
   json += "\"gyro_z\":" + String(gyroZ, 3) + ",";
+  json += "\"temperature\":" + String(currentTemp, 1) + ",";
+  json += "\"humidity\":" + String(currentHumidity, 1) + ",";
   json += "\"acceleration_magnitude\":" + String(accelMagnitude, 3) + ",";
   json += "\"vibration_rms\":" + String(vibrationRms, 4);
   json += "}";
