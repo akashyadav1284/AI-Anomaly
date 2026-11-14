@@ -89,7 +89,8 @@ export function LocalNetworkHubModule({
   const [packetCount, setPacketCount] = useState(0);
   const [lastPacketTime, setLastPacketTime] = useState<string | null>(null);
 
-  const pollIntervalRef = useRef<any>(null);
+  const isPollingRef = useRef<boolean>(false);
+  const pollTimeoutRef = useRef<any>(null);
   const failCountRef = useRef<number>(0);
 
   const connectToEsp32 = async (ipToUse?: string) => {
@@ -104,6 +105,12 @@ export function LocalNetworkHubModule({
 
     setIsConnecting(true);
     setStatusMessage(`Connecting to http://${targetIp}/data...`);
+
+    // Stop any existing polling
+    isPollingRef.current = false;
+    if (pollTimeoutRef.current) {
+      clearTimeout(pollTimeoutRef.current);
+    }
 
     try {
       const controller = new AbortController();
@@ -162,17 +169,20 @@ export function LocalNetworkHubModule({
   };
 
   const startPolling = (targetIp: string) => {
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
-    }
+    isPollingRef.current = true;
+    failCountRef.current = 0;
 
-    // Stream live readings every 80ms (12.5 Hz high-speed motion tracking)
-    pollIntervalRef.current = setInterval(async () => {
+    const pollCycle = async () => {
+      if (!isPollingRef.current) return;
+
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 1200);
+        const timeout = setTimeout(() => controller.abort(), 2000);
 
-        const res = await fetch(`http://${targetIp}/data`, { signal: controller.signal });
+        const res = await fetch(`http://${targetIp}/data`, {
+          signal: controller.signal,
+          headers: { Accept: 'application/json' },
+        });
         clearTimeout(timeout);
 
         if (res.ok) {
@@ -181,6 +191,7 @@ export function LocalNetworkHubModule({
           setPacketCount((c) => c + 1);
           setLastPacketTime(new Date().toLocaleTimeString());
           setIsConnected(true);
+          setStatusMessage(`🟢 Streaming active from http://${targetIp}/data`);
 
           if (onDirectTelemetry) {
             const normalized = normalizePhysicalData(data);
@@ -197,18 +208,26 @@ export function LocalNetworkHubModule({
         }
       } catch {
         failCountRef.current += 1;
-        if (failCountRef.current >= 15) {
+        if (failCountRef.current >= 20) {
           setIsConnected(false);
-          setStatusMessage(`Lost connection to http://${targetIp}/data. Retrying...`);
+          setStatusMessage(`Temporary Wi-Fi drop to http://${targetIp}/data. Auto-reconnecting...`);
         }
       }
-    }, 80);
+
+      // Schedule next poll cycle 150ms after completion so the ESP32 never gets overwhelmed!
+      if (isPollingRef.current) {
+        pollTimeoutRef.current = setTimeout(pollCycle, 150);
+      }
+    };
+
+    pollCycle();
   };
 
   const disconnectEsp32 = () => {
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
-      pollIntervalRef.current = null;
+    isPollingRef.current = false;
+    if (pollTimeoutRef.current) {
+      clearTimeout(pollTimeoutRef.current);
+      pollTimeoutRef.current = null;
     }
     setIsConnected(false);
     setIsConnecting(false);
@@ -226,8 +245,9 @@ export function LocalNetworkHubModule({
       connectToEsp32(savedIp);
     }
     return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
+      isPollingRef.current = false;
+      if (pollTimeoutRef.current) {
+        clearTimeout(pollTimeoutRef.current);
       }
     };
   }, []);

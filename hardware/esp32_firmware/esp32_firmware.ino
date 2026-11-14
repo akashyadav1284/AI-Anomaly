@@ -211,10 +211,12 @@ void handleDataRequest() {
   json += "}";
   json += "}";
 
-  // CORS headers permit direct cross-origin browser requests
+  // CORS & Keep-Alive headers permit high-speed non-blocking browser requests
   server.sendHeader("Access-Control-Allow-Origin", "*");
   server.sendHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   server.sendHeader("Access-Control-Allow-Headers", "*");
+  server.sendHeader("Connection", "keep-alive");
+  server.sendHeader("Keep-Alive", "timeout=5, max=1000");
   server.send(200, "application/json", json);
 }
 
