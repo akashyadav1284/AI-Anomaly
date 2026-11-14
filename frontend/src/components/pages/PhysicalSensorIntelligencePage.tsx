@@ -176,11 +176,12 @@ export function PhysicalSensorIntelligencePage() {
         isRefreshing={isRefreshing}
       />
 
-      {/* 2. Local Wi-Fi Network Hub Module (Direct ESP32 IP Pairing) */}
+      {/* 2. Hardware Wi-Fi Telemetry Hub (Cloud Stream + Local Pairing) */}
       <LocalNetworkHubModule
         onDirectTelemetry={(data) => {
           setDirectTelemetry(data);
         }}
+        isCloudStreaming={isOnline && !directTelemetry}
       />
 
       {/* 3. Physical Sensor Summary Cards */}

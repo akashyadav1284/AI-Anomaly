@@ -4,26 +4,22 @@
 // =========================================================================
 // IoT Anomaly Guard - ESP32 Physical Telemetry Node Configuration
 // =========================================================================
-// Rename this file to `config.h` and fill in your actual credentials.
-// NEVER commit your real `config.h` with Wi-Fi credentials or production keys.
+// Fill in your Wi-Fi credentials below.
 // =========================================================================
 
 // --- 1. Wi-Fi Configuration (Uses ESP32's Built-in Wi-Fi) ---
 #define WIFI_SSID       "YOUR_WIFI_SSID"
 #define WIFI_PASSWORD   "YOUR_WIFI_PASSWORD"
 
-// --- 2. Local Wi-Fi WebSocket Server (Direct Website Pairing) ---
-// ESP32 hosts a WebSocket server on this port so the React website connects directly
-#define LOCAL_WS_PORT   81
+// --- 2. Cloud Backend Ingestion (Default & Recommended) ---
+// The ESP32 sends telemetry to the cloud backend over HTTPS/HTTP.
+// The backend automatically broadcasts it via Secure WebSocket (WSS)
+// directly to your live website with zero browser security blocks!
+#define BACKEND_URL     "https://ai-anomaly.onrender.com/api/v1/sensors/telemetry"
+#define DEVICE_API_KEY  "iot-secret-api-key-2026"
+#define DEVICE_ID       "ESP32_PHYSICAL_01"
 
-// --- 3. Optional Cloud Ingestion Client (FastAPI / Render) ---
-#define ENABLE_CLOUD_INGEST false
-#define CLOUD_WS_HOST       "ai-anomaly.onrender.com"
-#define CLOUD_WS_PORT       443
-#define CLOUD_WS_PATH       "/api/v1/sensors/ws/ingest?token=iot-secret-api-key-2026"
-#define CLOUD_WS_USE_SSL    true
-
-// --- 4. Hardware Pinout Configuration ---
+// --- 3. Hardware Pinout Configuration ---
 #define DHT_PIN         4         // GPIO4 connected to DHT22 DATA pin
 #define DHT_TYPE        DHT22     // Sensor type DHT22 (AM2302)
 
@@ -35,9 +31,13 @@
 #define SCREEN_HEIGHT   64        // OLED display height in pixels
 #define OLED_I2C_ADDR   0x3C      // Typically 0x3C or 0x3D for SSD1306
 
-// --- 5. Device Identification & Interval ---
-#define DEVICE_ID       "ESP32_PHYSICAL_01"
-#define WS_STREAM_INTERVAL_MS   50     // 20 Hz streaming for MPU6050 3D tracking
-#define OLED_REFRESH_INTERVAL_MS 250    // 4 Hz refresh for OLED display
+// --- 4. Transmission & Refresh Intervals ---
+#define TELEMETRY_INTERVAL_MS   1000   // Send reading every 1000 ms (1 Hz)
+#define OLED_REFRESH_INTERVAL_MS 250   // 4 Hz refresh for OLED display
+#define MAX_HTTP_TIMEOUT_MS     6000   // 6 second timeout for HTTPS request
+
+// --- 5. Optional Local WebSocket Server (For http://localhost only) ---
+#define ENABLE_LOCAL_WS_SERVER  true
+#define LOCAL_WS_PORT           81
 
 #endif // CONFIG_H
