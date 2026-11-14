@@ -7,8 +7,6 @@ import {
   AlertTriangle,
   Database,
   Box,
-  FlaskConical,
-  GitCompare,
   FileText,
   ChevronLeft,
   ChevronRight,
@@ -73,13 +71,6 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: 'datasets', label: 'Dataset Explorer', icon: Database },
       { id: 'models', label: 'Model Registry', icon: Box },
-    ],
-  },
-  {
-    groupName: 'EXPERIMENTS',
-    items: [
-      { id: 'research', label: 'Model Research Lab', icon: FlaskConical },
-      { id: 'experiments', label: 'Experiment Compare', icon: GitCompare },
     ],
   },
   {
