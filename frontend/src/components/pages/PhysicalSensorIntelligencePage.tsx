@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { PhysicalSensorIntelligenceHeader } from '@/components/dashboard/PhysicalSensorIntelligenceHeader';
+import { LocalNetworkHubModule } from '@/components/dashboard/LocalNetworkHubModule';
 import { PhysicalSummaryCards, PhysicalMetrics } from '@/components/dashboard/PhysicalSummaryCards';
 import { MPU6050Canvas3D, MPU6050Telemetry } from '@/components/dashboard/MPU6050Canvas3D';
 import { EnvironmentalMotionCharts } from '@/components/dashboard/EnvironmentalMotionCharts';
@@ -18,16 +19,23 @@ export function PhysicalSensorIntelligencePage() {
   const [healthStatus, setHealthStatus] = useState<any | null>(null);
   const [readinessStatus, setReadinessStatus] = useState<any | null>(null);
 
-  // Real-time WebSocket feed
-  const { isConnected, latestTelemetry } = useSimulatorWebSocket(100);
+  // Direct Local Wi-Fi WebSocket telemetry state (from ESP32 port 81)
+  const [directTelemetry, setDirectTelemetry] = useState<any | null>(null);
+
+  // Real-time Cloud/Backend WebSocket feed
+  const { isConnected: isCloudConnected, latestTelemetry: cloudTelemetry } = useSimulatorWebSocket(100);
+
+  // Prioritize direct local Wi-Fi telemetry if paired, else backend cloud stream
+  const activeTelemetry = directTelemetry || cloudTelemetry;
 
   // Extract latest incoming physical reading
   const isLatestPhysical =
-    (latestTelemetry as any)?.source === 'physical' ||
-    latestTelemetry?.device_id?.startsWith('ESP32');
+    Boolean(directTelemetry) ||
+    (activeTelemetry as any)?.source === 'physical' ||
+    activeTelemetry?.device_id?.startsWith('ESP32');
 
   const latestFeat: PhysicalMetrics = isLatestPhysical
-    ? (latestTelemetry as any)?.features || {}
+    ? (activeTelemetry as any)?.features || {}
     : {};
 
   // Formatted MPU6050 object for 3D Viewport
@@ -42,7 +50,7 @@ export function PhysicalSensorIntelligencePage() {
           gyro_z: latestFeat.gyro_z ?? 0,
           accel_magnitude: latestFeat.acceleration_magnitude,
           vibration_rms: latestFeat.vibration_rms,
-          timestamp: latestTelemetry?.timestamp,
+          timestamp: activeTelemetry?.timestamp,
         }
       : null;
 
@@ -104,14 +112,14 @@ export function PhysicalSensorIntelligencePage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Update rows when new physical telemetry arrives via WebSocket
+  // Update rows when new physical telemetry arrives via WebSocket (Direct or Cloud)
   useEffect(() => {
-    if (!latestTelemetry || !isLatestPhysical) return;
-    const f = (latestTelemetry as any).features || {};
+    if (!activeTelemetry || !isLatestPhysical) return;
+    const f = (activeTelemetry as any).features || {};
     const newRow: PhysicalTelemetryRow = {
-      reading_id: (latestTelemetry as any).reading_id || `PHYS_${Date.now()}`,
-      timestamp: latestTelemetry.timestamp || new Date().toISOString(),
-      sequence: (latestTelemetry as any).sequence,
+      reading_id: (activeTelemetry as any).reading_id || `PHYS_${Date.now()}`,
+      timestamp: activeTelemetry.timestamp || new Date().toISOString(),
+      sequence: (activeTelemetry as any).sequence,
       temperature: f.temperature,
       humidity: f.humidity,
       accel_x: f.accel_x,
@@ -122,10 +130,10 @@ export function PhysicalSensorIntelligencePage() {
       gyro_z: f.gyro_z,
       acceleration_magnitude: f.acceleration_magnitude,
       vibration_rms: f.vibration_rms,
-      is_anomaly: (latestTelemetry as any).prediction?.is_anomaly,
+      is_anomaly: (activeTelemetry as any).prediction?.is_anomaly,
     };
     setHistoricalRows((prev) => [newRow, ...prev.slice(0, 99)]);
-  }, [latestTelemetry]);
+  }, [activeTelemetry]);
 
   // Sparkline and chart history data mapping
   const chartHistory = historicalRows
@@ -145,7 +153,7 @@ export function PhysicalSensorIntelligencePage() {
       vibration_rms: r.vibration_rms,
     }));
 
-  const isOnline = deviceSummary?.status === 'online';
+  const isOnline = Boolean(directTelemetry) || deviceSummary?.status === 'online';
 
   return (
     <div
@@ -157,9 +165,9 @@ export function PhysicalSensorIntelligencePage() {
       <PhysicalSensorIntelligenceHeader
         deviceId={deviceSummary?.device_id || 'ESP32_PHYSICAL_01'}
         isOnline={isOnline}
-        lastSeenSeconds={deviceSummary?.seconds_since_last_seen}
-        samplingRateHz={1.0}
-        isWsConnected={isConnected}
+        lastSeenSeconds={directTelemetry ? 0 : deviceSummary?.seconds_since_last_seen}
+        samplingRateHz={directTelemetry ? 20.0 : 1.0}
+        isWsConnected={Boolean(directTelemetry) || isCloudConnected}
         isBackendHealthy={healthStatus?.status === 'ok'}
         isDbConnected={readinessStatus?.components?.database?.ready === true}
         isFullscreen={isFullscreen}
@@ -168,7 +176,14 @@ export function PhysicalSensorIntelligencePage() {
         isRefreshing={isRefreshing}
       />
 
-      {/* 2. Physical Sensor Summary Cards */}
+      {/* 2. Local Wi-Fi Network Hub Module (Direct ESP32 IP Pairing) */}
+      <LocalNetworkHubModule
+        onDirectTelemetry={(data) => {
+          setDirectTelemetry(data);
+        }}
+      />
+
+      {/* 3. Physical Sensor Summary Cards */}
       <PhysicalSummaryCards
         current={latestFeat}
         history={chartHistory}
