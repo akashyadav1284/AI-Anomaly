@@ -211,6 +211,10 @@ void sendCloudTelemetry() {
   jsonPayload += "}";
   jsonPayload += "}";
 
+  // Stream clean JSON frame over Serial for direct USB WebSerial browser connection
+  Serial.print("TELEMETRY_JSON:");
+  Serial.println(jsonPayload);
+
   WiFiClientSecure client;
   client.setInsecure(); // Skip strict root CA verification for Render TLS
   
