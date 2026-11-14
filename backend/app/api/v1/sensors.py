@@ -182,6 +182,149 @@ async def ingest_physical_telemetry(
 
 
 # =========================================================================
+# High-Frequency WebSocket Ingestion for ESP32 Hardware (Phase 6)
+# =========================================================================
+
+@router.websocket("/ws/ingest")
+async def websocket_hardware_ingest(
+    websocket: WebSocket,
+    token: Optional[str] = Query(None, description="Device API Key"),
+    repo: MongoRepository = Depends(get_repo),
+):
+    """High-frequency, low-latency WebSocket ingestion stream for physical ESP32.
+    
+    Permits continuous real-time streaming of MPU6050 & DHT22 telemetry over Wi-Fi
+    at 10-50 Hz without HTTP connection renegotiation overhead.
+    """
+    settings = get_settings()
+    client_api_key = token or websocket.headers.get("X-API-Key")
+    if client_api_key != settings.API_KEY:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    await websocket.accept()
+    logger.info("Physical ESP32 node connected via WebSocket ingestion.")
+
+    try:
+        while True:
+            raw_text = await websocket.receive_text()
+            if raw_text == "ping":
+                await websocket.send_text('{"event_type":"pong"}')
+                continue
+
+            try:
+                import json
+                data = json.loads(raw_text)
+            except Exception:
+                await websocket.send_text('{"status":"error","message":"Invalid JSON"}')
+                continue
+
+            device_id = data.get("device_id", "ESP32_PHYSICAL_01")
+            seq = data.get("sequence", 0)
+            sensors_dict = data.get("sensors", {})
+            now_utc = datetime.now(timezone.utc)
+            reading_id = f"PHYS_WS_{uuid.uuid4().hex[:10]}"
+
+            # Derived physics metrics
+            ax = sensors_dict.get("accel_x", 0.0)
+            ay = sensors_dict.get("accel_y", 0.0)
+            az = sensors_dict.get("accel_z", 9.81)
+
+            if sensors_dict.get("acceleration_magnitude") is None:
+                mag = math.sqrt(ax * ax + ay * ay + az * az)
+                sensors_dict["acceleration_magnitude"] = round(mag, 3)
+
+            if sensors_dict.get("vibration_rms") is None:
+                dev = abs(sensors_dict["acceleration_magnitude"] - 9.80665)
+                sensors_dict["vibration_rms"] = round(dev, 4)
+
+            # Anomaly check
+            temp_val = float(sensors_dict.get("temperature", 25.0))
+            hum_val = float(sensors_dict.get("humidity", 50.0))
+            vib_val = float(sensors_dict.get("vibration_rms", 0.0))
+            mag_val = float(sensors_dict.get("acceleration_magnitude", 9.81))
+
+            is_temp_anom = temp_val > 60.0 or temp_val < 0.0
+            is_hum_anom = hum_val > 90.0 or hum_val < 10.0
+            is_vib_anom = vib_val > 2.5 or abs(mag_val - 9.81) > 3.0
+            is_anom = is_temp_anom or is_hum_anom or is_vib_anom
+
+            top_features = []
+            if is_vib_anom:
+                top_features.append({"feature": "vibration_rms", "value": vib_val, "score": 0.85})
+            if is_temp_anom:
+                top_features.append({"feature": "temperature", "value": temp_val, "score": 0.75})
+            if is_hum_anom:
+                top_features.append({"feature": "humidity", "value": hum_val, "score": 0.65})
+
+            inf_result = {
+                "model_name": "statistical_zscore_physical",
+                "is_anomaly": is_anom,
+                "normalized_score": 0.85 if is_anom else 0.12,
+                "decision_threshold": 0.5,
+                "top_contributing_features": top_features,
+            }
+
+            # Optional db persistence (rate-limited / batch or every frame)
+            # Persist every 10th frame or if anomaly to avoid DB thrashing at 50Hz
+            if seq % 10 == 0 or is_anom:
+                reading_doc = {
+                    "reading_id": reading_id,
+                    "device_id": device_id,
+                    "dataset_id": "physical_stream",
+                    "source": "physical",
+                    "sequence": seq,
+                    "timestamp": now_utc,
+                    "features": sensors_dict,
+                }
+                try:
+                    await repo.insert_sensor_readings([reading_doc])
+                    if is_anom:
+                        anomaly_doc = {
+                            "anomaly_id": f"PHYS_ANOM_{uuid.uuid4().hex[:10]}",
+                            "reading_id": reading_id,
+                            "device_id": device_id,
+                            "source": "physical",
+                            "timestamp": now_utc,
+                            "model_name": inf_result["model_name"],
+                            "model_version": "v1.0",
+                            "raw_score": 0.85,
+                            "normalized_score": 0.85,
+                            "threshold": 0.5,
+                            "severity": "CRITICAL" if (is_temp_anom and is_vib_anom) else "HIGH",
+                            "review_status": "pending",
+                            "affected_features": [f["feature"] for f in top_features],
+                            "explanation": "Physical anomaly detected via WebSocket telemetry.",
+                            "created_at": now_utc,
+                        }
+                        await repo.insert_anomaly(anomaly_doc)
+                except Exception as db_err:
+                    logger.warning("DB write warning in WS ingest: %s", db_err)
+
+            # Broadcast immediately to frontend 3D & gauges
+            telemetry_event = {
+                "event_type": "telemetry",
+                "simulation_id": "physical_stream",
+                "source": "physical",
+                "timestamp": now_utc.isoformat(),
+                "device_id": device_id,
+                "sequence": seq,
+                "features": sensors_dict,
+                "prediction": inf_result,
+            }
+            await ws_manager.broadcast(telemetry_event)
+
+            # Send brief ACK back to ESP32
+            await websocket.send_text(f'{{"status":"ok","seq":{seq},"anomaly":{str(is_anom).lower()}}}')
+
+    except WebSocketDisconnect:
+        logger.info("Physical ESP32 WebSocket disconnected.")
+    except Exception as e:
+        logger.error("Error in physical WebSocket ingest: %s", e)
+
+
+
+# =========================================================================
 # Device Status & Health Monitoring (Phase 4 & 6)
 # =========================================================================
 

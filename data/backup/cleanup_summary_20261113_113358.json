@@ -1,0 +1,10 @@
+{
+  "timestamp": "20261113_113358",
+  "database": "iot_anomaly_detection",
+  "total_readings_before": 57061,
+  "sim_readings_purged": 57061,
+  "phys_readings_preserved": 0,
+  "total_anomalies_before": 3424,
+  "sim_anomalies_purged": 3424,
+  "phys_anomalies_preserved": 0
+}
