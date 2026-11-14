@@ -3,6 +3,8 @@ import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Wifi, Radio, Unplug, RefreshCw, Globe, X, Check, ArrowRight } from 'lucide-react';
+import { apiService } from '@/services/api';
+import { getStoredThresholds } from '@/components/dashboard/PhysicalThresholdController';
 
 export function normalizePhysicalData(raw: any) {
   if (!raw) return {};
@@ -92,6 +94,8 @@ export function LocalNetworkHubModule({
   const isPollingRef = useRef<boolean>(false);
   const pollTimeoutRef = useRef<any>(null);
   const failCountRef = useRef<number>(0);
+  const lastCloudSyncRef = useRef<number>(0);
+  const isCloudSyncingRef = useRef<boolean>(false);
 
   const connectToEsp32 = async (ipToUse?: string) => {
     let targetIp = (ipToUse || inputIp || espIp).trim();
@@ -191,16 +195,75 @@ export function LocalNetworkHubModule({
           setPacketCount((c) => c + 1);
           setLastPacketTime(new Date().toLocaleTimeString());
           setIsConnected(true);
-          setStatusMessage(`🟢 Streaming active from http://${targetIp}/data`);
 
+          const normalized = normalizePhysicalData(data);
           if (onDirectTelemetry) {
-            const normalized = normalizePhysicalData(data);
             onDirectTelemetry({
               event_type: 'telemetry',
               source: 'physical',
-              device_id: data.device_id || `ESP32_${targetIp.replace(/\./g, '_')}`,
+              device_id: data.device_id || 'ESP32_PHYSICAL_01',
               features: normalized,
               timestamp: new Date().toISOString(),
+            });
+          }
+
+          // Check multi-axis thresholds
+          const th = getStoredThresholds();
+          const ax = normalized.accel_x ?? 0;
+          const ay = normalized.accel_y ?? 0;
+          const az = normalized.accel_z ?? 9.80665;
+          const temp = normalized.temperature ?? 25.0;
+          const hum = normalized.humidity ?? 50.0;
+          const vib = normalized.vibration_rms ?? 0.0;
+
+          const isAnomTemp = normalized.temperature !== undefined && (temp > th.temp_max || temp < th.temp_min);
+          const isAnomHum = normalized.humidity !== undefined && (hum > th.hum_max || hum < th.hum_min);
+          const isAnomAx = normalized.accel_x !== undefined && Math.abs(ax) > th.accel_x_max;
+          const isAnomAy = normalized.accel_y !== undefined && Math.abs(ay) > th.accel_y_max;
+          const isAnomAz = normalized.accel_z !== undefined && Math.abs(az - 9.80665) > th.accel_z_dev_max;
+          const isAnomVib = vib > th.vibration_max;
+
+          const isAnomalyBreached = isAnomTemp || isAnomHum || isAnomAx || isAnomAy || isAnomAz || isAnomVib;
+
+          if (isAnomalyBreached) {
+            const triggeredChannels: string[] = [];
+            if (isAnomAx) triggeredChannels.push(`X-tilt: ${ax.toFixed(2)} m/s²`);
+            if (isAnomAy) triggeredChannels.push(`Y-tilt: ${ay.toFixed(2)} m/s²`);
+            if (isAnomAz) triggeredChannels.push(`Z-shock: ${az.toFixed(2)} m/s²`);
+            if (isAnomTemp) triggeredChannels.push(`Temp: ${temp.toFixed(1)}°C`);
+            if (isAnomHum) triggeredChannels.push(`Hum: ${hum.toFixed(1)}%`);
+            if (isAnomVib) triggeredChannels.push(`Vib: ${vib.toFixed(3)}g`);
+            setStatusMessage(`🚨 Threshold Exceeded: ${triggeredChannels.join(', ')} — Logged to Anomaly Guard!`);
+          } else {
+            setStatusMessage(`🟢 Streaming active from http://${targetIp}/data`);
+          }
+
+          // Sync to cloud backend & MongoDB Atlas (every 1200ms or immediately upon anomaly breach)
+          const now = Date.now();
+          const timeSinceSync = now - lastCloudSyncRef.current;
+          const shouldSync = isAnomalyBreached ? (timeSinceSync > 400) : (timeSinceSync > 1200);
+
+          if (shouldSync && !isCloudSyncingRef.current) {
+            isCloudSyncingRef.current = true;
+            lastCloudSyncRef.current = now;
+            apiService.sendPhysicalTelemetry({
+              device_id: data.device_id || 'ESP32_PHYSICAL_01',
+              source: 'physical',
+              sensors: {
+                temperature: temp,
+                humidity: hum,
+                accel_x: ax,
+                accel_y: ay,
+                accel_z: az,
+                gyro_x: normalized.gyro_x ?? 0,
+                gyro_y: normalized.gyro_y ?? 0,
+                gyro_z: normalized.gyro_z ?? 0,
+                acceleration_magnitude: normalized.acceleration_magnitude,
+                vibration_rms: normalized.vibration_rms,
+              },
+              thresholds: th,
+            }).catch(() => null).finally(() => {
+              isCloudSyncingRef.current = false;
             });
           }
         } else {

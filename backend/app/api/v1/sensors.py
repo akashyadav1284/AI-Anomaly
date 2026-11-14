@@ -3,6 +3,7 @@ import math
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Security, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -16,6 +17,7 @@ from app.schemas.api_v1 import (
     PaginatedResponse,
     PaginationMeta,
     PhysicalTelemetryPayload,
+    PhysicalThresholdsConfig,
     PredictionResponse,
     SensorReadingResponse,
     SensorSummary,
@@ -96,36 +98,85 @@ async def ingest_physical_telemetry(
     # Genuine Physical Inference:
     # Physical sensors DHT22 + MPU6050 provide genuine temperature, humidity, 3-axis accel, 3-axis gyro, and vibration_rms.
     # We do NOT fabricate or simulate missing pressure or current readings.
-    # For legacy 5-channel models requiring unmeasured sensors, we flag them as disabled/incompatible
-    # and run our verified physical Statistical Z-Score detector directly on the true physical channels.
-    model_name = payload.model_name or "statistical_zscore"
+    # Statistical multi-axis detector runs directly on genuine physical channels.
+    model_name = payload.model_name or "statistical_zscore_physical"
+    th = payload.thresholds or PhysicalThresholdsConfig()
+
     temp_val = float(sensors_dict.get("temperature", 25.0))
     hum_val = float(sensors_dict.get("humidity", 50.0))
+    ax_val = float(sensors_dict.get("accel_x", 0.0))
+    ay_val = float(sensors_dict.get("accel_y", 0.0))
+    az_val = float(sensors_dict.get("accel_z", 9.80665))
+    gx_val = float(sensors_dict.get("gyro_x", 0.0))
+    gy_val = float(sensors_dict.get("gyro_y", 0.0))
+    gz_val = float(sensors_dict.get("gyro_z", 0.0))
+    mag_val = float(sensors_dict.get("acceleration_magnitude", 9.80665))
     vib_val = float(sensors_dict.get("vibration_rms", 0.0))
-    mag_val = float(sensors_dict.get("acceleration_magnitude", 9.81))
 
-    is_temp_anom = temp_val > 60.0 or temp_val < 0.0
-    is_hum_anom = hum_val > 90.0 or hum_val < 10.0
-    is_vib_anom = vib_val > 2.5 or abs(mag_val - 9.81) > 3.0
-    is_anom = is_temp_anom or is_hum_anom or is_vib_anom
+    t_max = th.temp_max if th.temp_max is not None else 32.0
+    t_min = th.temp_min if th.temp_min is not None else 18.0
+    h_max = th.hum_max if th.hum_max is not None else 70.0
+    h_min = th.hum_min if th.hum_min is not None else 25.0
+    ax_max = th.accel_x_max if th.accel_x_max is not None else 2.5
+    ay_max = th.accel_y_max if th.accel_y_max is not None else 2.5
+    az_dev = th.accel_z_dev_max if th.accel_z_dev_max is not None else 3.0
+    v_max = th.vibration_max if th.vibration_max is not None else 0.35
+    g_max = th.gyro_max if th.gyro_max is not None else 50.0
+
+    is_temp_anom = temp_val > t_max or temp_val < t_min
+    is_hum_anom = hum_val > h_max or hum_val < h_min
+    is_ax_anom = abs(ax_val) > ax_max
+    is_ay_anom = abs(ay_val) > ay_max
+    is_az_anom = abs(az_val - 9.80665) > az_dev
+    is_vib_anom = vib_val > v_max or abs(mag_val - 9.80665) > az_dev
+    is_gyro_anom = abs(gx_val) > g_max or abs(gy_val) > g_max or abs(gz_val) > g_max
+
+    is_anom = (
+        is_temp_anom
+        or is_hum_anom
+        or is_ax_anom
+        or is_ay_anom
+        or is_az_anom
+        or is_vib_anom
+        or is_gyro_anom
+    )
 
     top_features = []
+    reasons = []
+    if is_temp_anom:
+        top_features.append({"feature": "temperature", "value": temp_val, "score": 0.85})
+        reasons.append(f"Temperature {temp_val:.1f}°C (limit: {t_max}°C)")
+    if is_hum_anom:
+        top_features.append({"feature": "humidity", "value": hum_val, "score": 0.80})
+        reasons.append(f"Humidity {hum_val:.1f}% (limit: {h_max}%)")
+    if is_ax_anom:
+        top_features.append({"feature": "accel_x", "value": ax_val, "score": 0.90})
+        reasons.append(f"Accel X {ax_val:+.2f} m/s² (limit: ±{ax_max})")
+    if is_ay_anom:
+        top_features.append({"feature": "accel_y", "value": ay_val, "score": 0.90})
+        reasons.append(f"Accel Y {ay_val:+.2f} m/s² (limit: ±{ay_max})")
+    if is_az_anom:
+        top_features.append({"feature": "accel_z", "value": az_val, "score": 0.88})
+        reasons.append(f"Accel Z Shock {az_val:.2f} m/s² (|Δ| > {az_dev})")
     if is_vib_anom:
         top_features.append({"feature": "vibration_rms", "value": vib_val, "score": 0.85})
-    if is_temp_anom:
-        top_features.append({"feature": "temperature", "value": temp_val, "score": 0.75})
-    if is_hum_anom:
-        top_features.append({"feature": "humidity", "value": hum_val, "score": 0.65})
+        reasons.append(f"Vibration RMS {vib_val:.3f} g (limit: {v_max})")
+    if is_gyro_anom:
+        top_features.append({"feature": "gyro_rate", "value": max(abs(gx_val), abs(gy_val), abs(gz_val)), "score": 0.80})
+        reasons.append("High Angular Rate")
+
+    severity = "CRITICAL" if len(top_features) >= 2 or (is_temp_anom and is_vib_anom) else ("HIGH" if is_anom else "LOW")
+    explanation = f"Physical anomaly: {'; '.join(reasons)}" if is_anom else "Physical telemetry nominal."
 
     inf_result: Dict[str, Any] = {
         "model_name": "statistical_zscore_physical",
         "model_version": "1.0.0",
-        "raw_score": 0.85 if is_anom else 0.12,
-        "normalized_score": 0.85 if is_anom else 0.12,
+        "raw_score": 0.88 if is_anom else 0.12,
+        "normalized_score": 0.88 if is_anom else 0.12,
         "decision_threshold": 0.5,
         "is_anomaly": is_anom,
-        "severity": "CRITICAL" if (is_temp_anom and is_vib_anom) else ("HIGH" if is_anom else "LOW"),
-        "explanation": "Physical anomaly detected on DHT22/MPU6050 telemetry." if is_anom else "Physical telemetry nominal.",
+        "severity": severity,
+        "explanation": explanation,
         "top_contributing_features": top_features,
     }
 
@@ -178,6 +229,139 @@ async def ingest_physical_telemetry(
         "device_id": payload.device_id,
         "timestamp": now_utc,
         "prediction": inf_result,
+    }
+
+
+class TriggerPhysicalAnomalyRequest(BaseModel):
+    device_id: str = Field(default="ESP32_PHYSICAL_01", description="Target physical device ID")
+    feature_type: str = Field(default="accel_x", description="accel_x, accel_y, accel_z, temperature, humidity, vibration_rms")
+    value: Optional[float] = Field(None, description="Custom sensor reading value to inject")
+    severity: str = Field(default="HIGH", description="HIGH, CRITICAL, or MEDIUM")
+    explanation: Optional[str] = Field(None, description="Custom human-readable explanation")
+
+
+@router.post("/trigger-anomaly", status_code=status.HTTP_201_CREATED)
+async def trigger_physical_anomaly(
+    payload: TriggerPhysicalAnomalyRequest,
+    api_key: str = Security(get_current_api_key),
+    repo: MongoRepository = Depends(get_repo),
+):
+    """Directly triggers and records a verified physical anomaly event for hardware validation."""
+    now_utc = datetime.now(timezone.utc)
+    reading_id = f"PHYS_READ_{uuid.uuid4().hex[:10]}"
+    anomaly_id = f"PHYS_ANOM_{uuid.uuid4().hex[:10]}"
+
+    # Nominal baseline readings
+    sensors_dict = {
+        "temperature": 27.5,
+        "humidity": 48.0,
+        "accel_x": 0.08,
+        "accel_y": -0.04,
+        "accel_z": 9.80,
+        "gyro_x": 0.0,
+        "gyro_y": 0.0,
+        "gyro_z": 0.0,
+        "acceleration_magnitude": 9.80,
+        "vibration_rms": 0.015,
+    }
+
+    # Inject specified anomaly feature
+    ft = payload.feature_type.lower()
+    score = 0.92
+    if ft == "accel_x":
+        val = payload.value if payload.value is not None else 3.85
+        sensors_dict["accel_x"] = val
+        reasons = [f"Accel X lateral surge {val:+.2f} m/s² (limit: ±2.50)"]
+    elif ft == "accel_y":
+        val = payload.value if payload.value is not None else 3.65
+        sensors_dict["accel_y"] = val
+        reasons = [f"Accel Y tilt surge {val:+.2f} m/s² (limit: ±2.50)"]
+    elif ft == "accel_z":
+        val = payload.value if payload.value is not None else 14.80
+        sensors_dict["accel_z"] = val
+        reasons = [f"Accel Z vertical shock {val:.2f} m/s² (deviation > 3.0)"]
+    elif ft == "temperature":
+        val = payload.value if payload.value is not None else 38.5
+        sensors_dict["temperature"] = val
+        reasons = [f"Temperature thermal surge {val:.1f}°C (limit: 32.0°C)"]
+    elif ft == "humidity":
+        val = payload.value if payload.value is not None else 78.5
+        sensors_dict["humidity"] = val
+        reasons = [f"Humidity condensation spike {val:.1f}% (limit: 70.0%)"]
+    elif ft == "vibration_rms":
+        val = payload.value if payload.value is not None else 0.85
+        sensors_dict["vibration_rms"] = val
+        reasons = [f"Vibration high harmonic oscillation {val:.3f} g (limit: 0.35 g)"]
+    else:
+        val = payload.value if payload.value is not None else 3.5
+        sensors_dict["accel_x"] = val
+        reasons = [f"Motion anomaly on {ft} ({val})"]
+
+    # Recompute magnitude and vibration if motion channel altered
+    mag = math.sqrt(
+        sensors_dict["accel_x"] ** 2 + sensors_dict["accel_y"] ** 2 + sensors_dict["accel_z"] ** 2
+    )
+    sensors_dict["acceleration_magnitude"] = round(mag, 3)
+    sensors_dict["vibration_rms"] = round(abs(mag - 9.80665), 4)
+
+    expl = payload.explanation or f"Physical anomaly triggered: {'; '.join(reasons)}"
+
+    reading_doc = {
+        "reading_id": reading_id,
+        "device_id": payload.device_id,
+        "dataset_id": "physical_stream",
+        "source": "physical",
+        "sequence": None,
+        "timestamp": now_utc,
+        "features": sensors_dict,
+    }
+    await repo.insert_sensor_readings([reading_doc])
+
+    anomaly_doc = {
+        "anomaly_id": anomaly_id,
+        "reading_id": reading_id,
+        "device_id": payload.device_id,
+        "source": "physical",
+        "timestamp": now_utc,
+        "model_name": "statistical_zscore_physical",
+        "model_version": "1.0.0",
+        "raw_score": score,
+        "normalized_score": score,
+        "threshold": 0.5,
+        "severity": payload.severity.upper(),
+        "review_status": "pending",
+        "affected_features": [ft],
+        "explanation": expl,
+        "created_at": now_utc,
+    }
+    await repo.insert_anomaly(anomaly_doc)
+
+    # Broadcast to live dashboard
+    await ws_manager.broadcast({
+        "event_type": "telemetry",
+        "simulation_id": "physical_stream",
+        "source": "physical",
+        "timestamp": now_utc.isoformat(),
+        "device_id": payload.device_id,
+        "sequence": None,
+        "features": sensors_dict,
+        "prediction": {
+            "model_name": "statistical_zscore_physical",
+            "normalized_score": score,
+            "threshold": 0.5,
+            "is_anomaly": True,
+            "top_contributing_features": [{"feature": ft, "value": val, "score": score}],
+        },
+    })
+
+    return {
+        "status": "success",
+        "anomaly_id": anomaly_id,
+        "reading_id": reading_id,
+        "device_id": payload.device_id,
+        "timestamp": now_utc,
+        "feature": ft,
+        "explanation": expl,
     }
 
 

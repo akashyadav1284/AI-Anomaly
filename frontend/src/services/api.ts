@@ -240,8 +240,32 @@ export const apiService = {
       vibration_rms?: number;
     };
     model_name?: string;
+    thresholds?: {
+      temp_min?: number;
+      temp_max?: number;
+      hum_min?: number;
+      hum_max?: number;
+      accel_x_max?: number;
+      accel_y_max?: number;
+      accel_z_dev_max?: number;
+      vibration_max?: number;
+      gyro_max?: number;
+    };
   }): Promise<any> => {
     return request<any>('/sensors/telemetry', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  triggerPhysicalAnomaly: async (payload: {
+    device_id?: string;
+    feature_type?: string;
+    value?: number;
+    severity?: string;
+    explanation?: string;
+  }): Promise<any> => {
+    return request<any>('/sensors/trigger-anomaly', {
       method: 'POST',
       body: JSON.stringify(payload),
     });

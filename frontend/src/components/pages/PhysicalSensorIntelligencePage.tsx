@@ -5,6 +5,7 @@ import { PhysicalSummaryCards, PhysicalMetrics } from '@/components/dashboard/Ph
 import { MPU6050Canvas3D, MPU6050Telemetry } from '@/components/dashboard/MPU6050Canvas3D';
 import { EnvironmentalMotionCharts } from '@/components/dashboard/EnvironmentalMotionCharts';
 import { PhysicalTelemetryTable, PhysicalTelemetryRow } from '@/components/dashboard/PhysicalTelemetryTable';
+import { PhysicalThresholdController } from '@/components/dashboard/PhysicalThresholdController';
 import { apiService } from '@/services/api';
 import { useSimulatorWebSocket } from '@/services/useWebSocket';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -311,6 +312,12 @@ export function PhysicalSensorIntelligencePage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* 5b. Physical Anomaly Detection Threshold Engine */}
+      <PhysicalThresholdController
+        onAnomalyTriggered={loadHardwareStatus}
+        onThresholdsChanged={loadHardwareStatus}
+      />
 
       {/* 6. Physical Hardware Telemetry Register */}
       <PhysicalTelemetryTable

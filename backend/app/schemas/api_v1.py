@@ -289,6 +289,19 @@ class PhysicalSensorChannels(BaseModel):
     vibration_rms: Optional[float] = Field(None, description="Root Mean Square vibration metric")
 
 
+class PhysicalThresholdsConfig(BaseModel):
+    """Configurable multi-axis operational thresholds for physical anomaly detection."""
+    temp_min: Optional[float] = Field(18.0, description="Minimum allowable temperature in °C")
+    temp_max: Optional[float] = Field(32.0, description="Maximum allowable temperature in °C")
+    hum_min: Optional[float] = Field(25.0, description="Minimum allowable relative humidity in %")
+    hum_max: Optional[float] = Field(70.0, description="Maximum allowable relative humidity in %")
+    accel_x_max: Optional[float] = Field(2.5, description="Maximum allowable X-axis acceleration magnitude in m/s^2")
+    accel_y_max: Optional[float] = Field(2.5, description="Maximum allowable Y-axis acceleration magnitude in m/s^2")
+    accel_z_dev_max: Optional[float] = Field(3.0, description="Maximum allowable deviation from 1G standard gravity on Z in m/s^2")
+    vibration_max: Optional[float] = Field(0.35, description="Maximum allowable vibration RMS in g")
+    gyro_max: Optional[float] = Field(50.0, description="Maximum allowable angular velocity in deg/s or rad/s")
+
+
 class PhysicalTelemetryPayload(BaseModel):
     """Payload schema transmitted by physical ESP32 nodes."""
     device_id: str = Field(..., min_length=2, max_length=64, description="Unique physical device identifier")
@@ -297,6 +310,7 @@ class PhysicalTelemetryPayload(BaseModel):
     timestamp: Optional[datetime] = Field(default_factory=get_utc_now, description="Reading timestamp in UTC")
     sensors: PhysicalSensorChannels
     model_name: Optional[str] = Field(default="isolation_forest", description="ML model for anomaly inference")
+    thresholds: Optional[PhysicalThresholdsConfig] = Field(None, description="Optional custom operational threshold overrides")
 
 
 class DeviceStatusSummary(BaseModel):
