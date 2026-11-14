@@ -29,7 +29,8 @@ export function SensorExplorerPage() {
       const list = await apiService.getSensors();
       setSensors(list);
       if (list.length > 0 && !selectedDevice) {
-        setSelectedDevice(list[0].device_id);
+        const preferred = list.find((s) => s.device_id.startsWith('ESP32')) || list[0];
+        setSelectedDevice(preferred.device_id);
       }
     } catch {
       // ignore
