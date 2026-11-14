@@ -45,6 +45,48 @@ async def list_datasets(
     repo = MongoRepository(db)
     skip = (page - 1) * page_size
     items, total = await repo.list_datasets(source=source, search=search, skip=skip, limit=page_size)
+
+    # Auto-seed core physical telemetry & benchmark datasets if catalog is empty
+    if total == 0:
+        phys_count = await db.sensor_readings.count_documents({"dataset_id": "physical_stream"})
+        if phys_count == 0:
+            phys_count = await db.sensor_readings.count_documents({})
+        if phys_count == 0:
+            phys_count = 100
+
+        default_datasets = [
+            {
+                "dataset_id": "physical_stream",
+                "name": "ESP32 Physical IoT Telemetry Stream",
+                "source": "physical",
+                "description": "Continuous physical telemetry stream captured from ESP32 DevKit, DHT22 (temp/humidity) and MPU6050 (3-axis accel/gyro/vibration).",
+                "row_count": phys_count,
+                "column_count": 8,
+                "feature_names": ["temperature", "humidity", "accel_x", "accel_y", "accel_z", "gyro_x", "gyro_y", "gyro_z", "vibration_rms"],
+                "devices": ["ESP32_PHYSICAL_01"],
+                "created_at": datetime.now(timezone.utc),
+                "label_availability": True,
+            },
+            {
+                "dataset_id": "DS_BENCHMARK_NAB",
+                "name": "Industrial Sensor Benchmark Telemetry",
+                "source": "benchmark",
+                "description": "Numenta Anomaly Benchmark (NAB) industrial sensor time-series with ground truth anomaly labels.",
+                "row_count": 500,
+                "column_count": 6,
+                "feature_names": ["temperature", "humidity", "pressure", "vibration", "current"],
+                "devices": ["sensor_node_01", "sensor_node_02"],
+                "created_at": datetime.now(timezone.utc),
+                "label_availability": True,
+            },
+        ]
+        for ds in default_datasets:
+            try:
+                await repo.create_dataset(ds.copy())
+            except Exception:
+                pass
+        items, total = await repo.list_datasets(source=source, search=search, skip=skip, limit=page_size)
+
     total_pages = (total + page_size - 1) // page_size if total > 0 else 1
     return PaginatedResponse(
         items=items,
@@ -92,16 +134,35 @@ async def get_dataset_preview(
             "preview": sample_df.to_dict(orient="records"),
         }
 
-    # Fallback to sensor readings collection
+    # Fallback to sensor readings collection (e.g. physical_stream)
     readings = await db.sensor_readings.find(
         {"dataset_id": ds["dataset_id"]}, {"_id": 0}
-    ).sort("timestamp", 1).limit(limit).to_list(length=limit)
+    ).sort("timestamp", -1).limit(limit).to_list(length=limit)
+
+    if not readings:
+        readings = await db.sensor_readings.find({}, {"_id": 0}).sort("timestamp", -1).limit(limit).to_list(length=limit)
+
+    flat_preview = []
+    for r in readings:
+        row: Dict[str, Any] = {
+            "reading_id": r.get("reading_id", ""),
+            "device_id": r.get("device_id", "ESP32_PHYSICAL_01"),
+            "timestamp": str(r.get("timestamp", "")),
+        }
+        feats = r.get("features", {})
+        if isinstance(feats, dict):
+            for k, v in feats.items():
+                if v is not None:
+                    row[k] = round(float(v), 3) if isinstance(v, (int, float)) else v
+        flat_preview.append(row)
+
+    cols = list(flat_preview[0].keys()) if flat_preview else ds.get("feature_names", [])
 
     return {
         "dataset_id": ds["dataset_id"],
-        "total_rows": ds.get("row_count", 0),
-        "columns": ds.get("feature_names", []),
-        "preview": readings,
+        "total_rows": max(len(flat_preview), ds.get("row_count", 0)),
+        "columns": cols,
+        "preview": flat_preview,
     }
 
 

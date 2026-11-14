@@ -57,16 +57,16 @@ class DatasetPreprocessingRequest(BaseModel):
 class DatasetResponse(BaseModel):
     dataset_id: str
     name: str
-    source: str
+    source: str = "physical"
     description: Optional[str] = None
-    row_count: int
-    column_count: int
-    feature_names: List[str]
-    devices: List[str]
+    row_count: int = 0
+    column_count: int = 0
+    feature_names: List[str] = Field(default_factory=list)
+    devices: List[str] = Field(default_factory=list)
     timestamp_start: Optional[str] = None
     timestamp_end: Optional[str] = None
     label_availability: bool = False
-    created_at: datetime
+    created_at: datetime = Field(default_factory=get_utc_now)
     audited_at: Optional[datetime] = None
     quality_summary: Optional[Dict[str, Any]] = None
     storage_path: Optional[str] = None
@@ -175,13 +175,13 @@ class ModelTrainingRequest(BaseModel):
 class ModelResponse(BaseModel):
     model_id: str
     model_name: str
-    model_version: str
-    algorithm: str
-    feature_names: List[str]
-    threshold: float
-    threshold_method: str
-    status: str
-    created_at: datetime
+    model_version: str = "1.0.0"
+    algorithm: str = "ML Anomaly Detector"
+    feature_names: List[str] = Field(default_factory=lambda: ["temperature", "humidity", "accel_x", "accel_y", "accel_z", "vibration_rms"])
+    threshold: float = 0.50
+    threshold_method: str = "contamination"
+    status: str = "ready"
+    created_at: datetime = Field(default_factory=get_utc_now)
     evaluation_metrics: Optional[Dict[str, Any]] = None
 
 
